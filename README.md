@@ -1,6 +1,6 @@
 # Dashboard macro Argentina
 
-Pagina unica con indicadores macroeconomicos y sociales de Argentina obtenidos desde la API oficial de Series de Tiempo.
+Pagina unica con indicadores macroeconomicos y sociales de Argentina obtenidos desde la API oficial de Series de Tiempo y la API de Estadisticas del BCRA.
 
 ## Actualizacion
 
@@ -15,4 +15,5 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 ## Fuente
 
 - API: `https://apis.datos.gob.ar/series/api/series`
+- API BCRA: `https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias`
 - Datos publicados por INDEC, BCRA y otros organismos oficiales.

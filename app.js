@@ -18,7 +18,9 @@ function valueFormatter(series, compact = false) {
   const scale = inferPercentScale(series);
   if (series.format === "percent") return value => `${(value * scale).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
   if (series.format === "currency") return value => `$ ${value.toLocaleString("es-AR", { maximumFractionDigits: 0, notation: compact ? "compact" : "standard" })}`;
+  if (series.format === "ars_millions") return value => `$ ${value.toLocaleString("es-AR", { maximumFractionDigits: 0, notation: compact ? "compact" : "standard" })} M`;
   if (series.format === "usd_millions") return value => `USD ${value.toLocaleString("es-AR", { maximumFractionDigits: 0, notation: compact ? "compact" : "standard" })}`;
+  if (series.format === "exchange_rate") return value => `$ ${value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return value => value.toLocaleString("es-AR", { maximumFractionDigits: 1, notation: compact ? "compact" : "standard" });
 }
 

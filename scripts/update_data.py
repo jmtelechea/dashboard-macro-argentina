@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT / "data" / "series.json"
 API_URL = "https://apis.datos.gob.ar/series/api/series"
+BCRA_API_URL = "https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias"
 
 SERIES = [
     {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent"},
@@ -25,13 +26,62 @@ SERIES = [
     {"code": "E1", "id": "42.3_EPH_PUNTUATAL_0_M_30", "title": "Desocupacion EPH", "subtitle": "Serie trimestral", "group": "Empleo", "format": "percent"},
     {"code": "X1", "id": "168.1_T_CAMBIOR_D_0_0_26", "title": "Tipo de cambio BNA vendedor", "subtitle": "Pesos por dolar", "group": "Sector externo", "format": "currency"},
     {"code": "X2", "id": "174.1_RRVAS_IDOS_0_0_36", "title": "Reservas internacionales", "subtitle": "Saldo mensual", "group": "Sector externo", "format": "usd_millions"},
+    {"code": "B1268", "id": "1268", "title": "Adelantos transitorios al Gobierno Nacional", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B1266", "id": "1266", "title": "Depositos del Gobierno en el BCRA en moneda extranjera", "subtitle": "Saldo diario expresado en pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B1265", "id": "1265", "title": "Depositos del Gobierno en el BCRA en pesos", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B1262", "id": "1262", "title": "Posicion de pases pasivos", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B1244", "id": "1244", "title": "Reservas internacionales BCRA", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
+    {"code": "B1239", "id": "1239", "title": "M2 privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B1187", "id": "1187", "title": "Banda cambiaria: limite inferior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
+    {"code": "B1188", "id": "1188", "title": "Banda cambiaria: limite superior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
+    {"code": "B7", "id": "7", "title": "Tasa BADLAR de bancos privados", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra"},
+    {"code": "B5", "id": "5", "title": "Tipo de cambio mayorista de referencia", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
+    {"code": "B1341", "id": "1341", "title": "Prestamos al sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B197", "id": "197", "title": "M2 transaccional del sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B75", "id": "75", "title": "Oro, divisas y otros activos de reserva", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
+    {"code": "B74", "id": "74", "title": "Reservas internacionales sin DEG 2009", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
 ]
 
 IPC_CODE = "P1"
 BASE_MONTH = "2023-11-01"
 
 
-def fetch_one(item: dict) -> dict:
+def fetch_bcra(item: dict) -> dict:
+    points = []
+    offset = 0
+    total = None
+    while total is None or offset < total:
+        params = urlencode({"offset": offset, "limit": 1000})
+        request = Request(
+            f"{BCRA_API_URL}/{item['id']}?{params}",
+            headers={"User-Agent": "dashboard-macro-argentina/1.0"},
+        )
+        with urlopen(request, timeout=45) as response:
+            payload = json.load(response)
+        if payload.get("status") != 200 or not payload.get("results"):
+            raise RuntimeError("La API del BCRA no devolvio resultados")
+        total = payload.get("metadata", {}).get("resultset", {}).get("count", 0)
+        detail = payload["results"][0].get("detalle", [])
+        points.extend({"date": point["fecha"], "value": point["valor"]} for point in detail if point.get("valor") is not None)
+        if not detail:
+            break
+        offset += len(detail)
+    points.sort(key=lambda point: point["date"])
+    if not points:
+        raise RuntimeError("La API del BCRA devolvio una serie sin observaciones")
+    result = dict(item)
+    result.update({
+        "description": item["title"],
+        "units": item["subtitle"],
+        "source": "Banco Central de la Republica Argentina",
+        "frequency": "day",
+        "data": points,
+    })
+    return result
+
+
+def fetch_datos_argentina(item: dict) -> dict:
     query = {"ids": item["id"], "last": 1000, "metadata": "simple"}
     params = urlencode(query)
     request = Request(f"{API_URL}?{params}", headers={"User-Agent": "dashboard-macro-argentina/1.0"})
@@ -67,6 +117,19 @@ def fetch_one(item: dict) -> dict:
             last_error = exc
             time.sleep(2 ** attempt)
     raise RuntimeError(f"No se pudo descargar {item['code']} ({item['id']}): {last_error}")
+
+
+def fetch_one(item: dict) -> dict:
+    if item.get("provider") == "bcra":
+        last_error = None
+        for attempt in range(3):
+            try:
+                return fetch_bcra(item)
+            except Exception as exc:
+                last_error = exc
+                time.sleep(2 ** attempt)
+        raise RuntimeError(f"No se pudo descargar {item['code']} ({item['id']}): {last_error}")
+    return fetch_datos_argentina(item)
 
 
 def main() -> None:

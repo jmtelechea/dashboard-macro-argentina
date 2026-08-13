@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timezone
+from collections import defaultdict
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -24,27 +25,99 @@ SERIES = [
     {"code": "S1", "id": "158.1_REPTE_0_0_5", "title": "RIPTE real", "subtitle": "Pesos constantes de noviembre de 2023", "group": "Ingresos", "format": "currency", "deflate": True},
     {"code": "S5", "id": "58.1_MP_0_M_13", "title": "Haber jubilatorio minimo real", "subtitle": "Pesos constantes de noviembre de 2023", "group": "Ingresos", "format": "currency", "deflate": True},
     {"code": "E1", "id": "42.3_EPH_PUNTUATAL_0_M_30", "title": "Desocupacion EPH", "subtitle": "Serie trimestral", "group": "Empleo", "format": "percent"},
-    {"code": "X1", "id": "168.1_T_CAMBIOR_D_0_0_26", "title": "Tipo de cambio BNA vendedor", "subtitle": "Pesos por dolar", "group": "Sector externo", "format": "currency"},
-    {"code": "X2", "id": "174.1_RRVAS_IDOS_0_0_36", "title": "Reservas internacionales", "subtitle": "Saldo mensual", "group": "Sector externo", "format": "usd_millions"},
-    {"code": "B1268", "id": "1268", "title": "Adelantos transitorios al Gobierno Nacional", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
-    {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "GDP", "id": "4.4_OGP_2004_T_17", "title": "PIB nominal trimestral", "subtitle": "Millones de pesos corrientes", "group": "Auxiliar", "format": "ars_millions", "hidden": True},
+    {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B1266", "id": "1266", "title": "Depositos del Gobierno en el BCRA en moneda extranjera", "subtitle": "Saldo diario expresado en pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
     {"code": "B1265", "id": "1265", "title": "Depositos del Gobierno en el BCRA en pesos", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
-    {"code": "B1262", "id": "1262", "title": "Posicion de pases pasivos", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
     {"code": "B1244", "id": "1244", "title": "Reservas internacionales BCRA", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
-    {"code": "B1239", "id": "1239", "title": "M2 privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
-    {"code": "B1187", "id": "1187", "title": "Banda cambiaria: limite inferior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
-    {"code": "B1188", "id": "1188", "title": "Banda cambiaria: limite superior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
+    {"code": "B1187", "id": "1187", "title": "Banda cambiaria: limite inferior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
+    {"code": "B1188", "id": "1188", "title": "Banda cambiaria: limite superior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B7", "id": "7", "title": "Tasa BADLAR de bancos privados", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra"},
-    {"code": "B5", "id": "5", "title": "Tipo de cambio mayorista de referencia", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
-    {"code": "B1341", "id": "1341", "title": "Prestamos al sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
-    {"code": "B197", "id": "197", "title": "M2 transaccional del sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
-    {"code": "B75", "id": "75", "title": "Oro, divisas y otros activos de reserva", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
-    {"code": "B74", "id": "74", "title": "Reservas internacionales sin DEG 2009", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
+    {"code": "B5", "id": "5", "title": "Tipo de cambio mayorista de referencia", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
+    {"code": "B1341", "id": "1341", "title": "Prestamos al sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
+    {"code": "B197", "id": "197", "title": "M2 transaccional del sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
 ]
 
 IPC_CODE = "P1"
 BASE_MONTH = "2023-11-01"
+REAL_CODES = {"B1248", "B1341", "B197"}
+
+
+def month_key(date: str) -> str:
+    return f"{date[:7]}-01"
+
+
+def quarter_key(date: str) -> str:
+    year, month = map(int, date[:7].split("-"))
+    quarter_month = ((month - 1) // 3) * 3 + 1
+    return f"{year:04d}-{quarter_month:02d}-01"
+
+
+def make_real_series(item: dict, price_index: dict) -> dict:
+    comparable = [point for point in item["data"] if month_key(point["date"]) in price_index]
+    if not comparable:
+        raise RuntimeError(f"No hay meses comparables entre IPC y {item['code']}")
+    base_month = month_key(comparable[0]["date"])
+    base_level = price_index[base_month]
+    result = dict(item)
+    result.update({
+        "code": f"{item['code']}_REAL",
+        "id": f"{item['id']}_real",
+        "title": f"{item['title']} real",
+        "subtitle": f"Millones de pesos constantes de {base_month[:7]}",
+        "format": "ars_millions",
+        "frequency": "day",
+        "hidden": False,
+        "data": [
+            {"date": point["date"], "value": point["value"] * base_level / price_index[month_key(point["date"])]}
+            for point in comparable
+        ],
+        "deflator": {"series": IPC_CODE, "base_month": base_month, "method": "IPC nacional encadenado"},
+    })
+    return result
+
+
+def make_gdp_series(item: dict, gdp: dict) -> dict:
+    buckets = defaultdict(list)
+    for point in item["data"]:
+        buckets[quarter_key(point["date"])].append(point["value"])
+    gdp_by_quarter = {point["date"]: point["value"] for point in gdp["data"]}
+    data = []
+    for quarter in sorted(set(buckets) & set(gdp_by_quarter)):
+        average = sum(buckets[quarter]) / len(buckets[quarter])
+        data.append({"date": quarter, "value": average / gdp_by_quarter[quarter] * 100})
+    result = dict(item)
+    result.update({
+        "code": f"{item['code']}_GDP",
+        "id": f"{item['id']}_gdp",
+        "title": f"{item['title']} / PIB",
+        "subtitle": "Promedio trimestral como porcentaje del PIB nominal",
+        "format": "percent",
+        "frequency": "quarter",
+        "hidden": False,
+        "data": data,
+        "calculation": {"denominator": gdp["id"], "method": "Promedio diario trimestral / PIB nominal trimestral"},
+    })
+    return result
+
+
+def make_exchange_chart(by_code: dict) -> dict:
+    components = [by_code[code] for code in ("B1187", "B1188", "B5")]
+    return {
+        "code": "BANDAS_FX",
+        "id": "1187_1188_5",
+        "title": "Bandas cambiarias y tipo de cambio mayorista",
+        "subtitle": "Pesos por dolar",
+        "group": "BCRA",
+        "format": "exchange_rate",
+        "frequency": "day",
+        "source": "Banco Central de la Republica Argentina",
+        "lines": [
+            {"label": component["title"], "data": component["data"]}
+            for component in components
+        ],
+        "data": components[0]["data"],
+    }
 
 
 def fetch_bcra(item: dict) -> dict:
@@ -177,6 +250,25 @@ def main() -> None:
             item["data"] = real_data
             item["units"] = "Pesos constantes de noviembre de 2023"
             item["deflator"] = {"series": ipc["id"], "base_month": BASE_MONTH, "method": "IPC nacional encadenado"}
+
+        price_level = 1.0
+        price_index = {}
+        for point in ipc["data"]:
+            price_level *= 1 + point["value"]
+            price_index[point["date"]] = price_level
+        gdp = by_code.get("GDP")
+        if not gdp:
+            raise RuntimeError("No se pudo obtener el PIB nominal trimestral")
+        derived = []
+        for code in REAL_CODES:
+            source = by_code.get(code)
+            if not source:
+                raise RuntimeError(f"No se pudo obtener la serie fuente {code}")
+            derived.extend((make_real_series(source, price_index), make_gdp_series(source, gdp)))
+        series.extend(derived)
+        series.append(make_exchange_chart(by_code))
+
+    series = [item for item in series if not item.get("hidden")]
 
     if not series:
         raise RuntimeError("No se pudo obtener ninguna serie y no existe una copia anterior")

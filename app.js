@@ -1,4 +1,5 @@
 const NAVY = "#0a2540";
+const LINE_COLORS = ["rgb(150, 175, 209)", "#667788", NAVY];
 const charts = [];
 
 const monthFormatter = new Intl.DateTimeFormat("es-AR", { month: "short", year: "2-digit", timeZone: "UTC" });
@@ -46,7 +47,7 @@ function createChartCard(series) {
   const article = document.createElement("article");
   article.className = "chart-card";
   article.dataset.group = series.group;
-  const latest = series.data.at(-1);
+  const latest = series.lines ? series.lines.at(-1).data.at(-1) : series.data.at(-1);
   article.innerHTML = `<h2>${series.title}</h2>
     <p class="subtitle">${series.subtitle}</p>
     <div class="chart-wrap"><canvas aria-label="${series.title}" role="img"></canvas></div>
@@ -57,20 +58,28 @@ function createChartCard(series) {
     </div>
     <div class="chart-meta"><span>Ultimo: ${valueFormatter(series)(latest.value)}</span><span>${fullDateFormatter.format(asDate(latest.date))}</span></div>`;
   let data = series.data.slice(-initialWindow(series));
+  const startDate = () => data[0].date;
+  const datasets = series.lines
+    ? series.lines.map((line, index) => ({
+        label: line.label,
+        data: line.data.filter(point => point.date >= startDate()).map(point => ({ x: point.date, y: point.value })),
+        borderColor: LINE_COLORS[index], borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18
+      }))
+    : [{ data: data.map(point => point.value), borderColor: NAVY, borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18 }];
   const format = valueFormatter(series, true);
   const chart = new Chart(article.querySelector("canvas"), {
     type: "line",
     data: {
       labels: data.map(point => point.date),
-      datasets: [{ data: data.map(point => point.value), borderColor: NAVY, borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18 }]
+      datasets
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { display: false },
-        tooltip: { displayColors: false, callbacks: { title: items => fullDateFormatter.format(asDate(items[0].label)), label: item => format(item.raw) } }
+        legend: { display: Boolean(series.lines), labels: { color: NAVY, boxWidth: 24, boxHeight: 2 } },
+        tooltip: { displayColors: Boolean(series.lines), callbacks: { title: items => fullDateFormatter.format(asDate(items[0].label)), label: item => `${item.dataset.label ? `${item.dataset.label}: ` : ""}${format(item.parsed.y)}` } }
       },
       scales: {
         x: {
@@ -92,7 +101,13 @@ function createChartCard(series) {
     const count = Number(slider.value);
     data = series.data.slice(-count);
     chart.data.labels = data.map(point => point.date);
-    chart.data.datasets[0].data = data.map(point => point.value);
+    if (series.lines) {
+      chart.data.datasets.forEach((dataset, index) => {
+        dataset.data = series.lines[index].data.filter(point => point.date >= data[0].date).map(point => ({ x: point.date, y: point.value }));
+      });
+    } else {
+      chart.data.datasets[0].data = data.map(point => point.value);
+    }
     windowLabel.textContent = `${monthFormatter.format(asDate(data[0].date))} - ${monthFormatter.format(asDate(data.at(-1).date))}`;
     chart.update("none");
   };

@@ -22,9 +22,9 @@ function valueFormatter(series, compact = false) {
   return value => value.toLocaleString("es-AR", { maximumFractionDigits: 1, notation: compact ? "compact" : "standard" });
 }
 
-function recentData(series) {
+function initialWindow(series) {
   const limits = { day: 365, month: 120, quarter: 48, semester: 30, year: 20 };
-  return series.data.slice(-(limits[series.frequency] || 120));
+  return Math.min(series.data.length, limits[series.frequency] || 120);
 }
 
 function renderSummary(seriesList) {
@@ -48,8 +48,13 @@ function createChartCard(series) {
   article.innerHTML = `<h2>${series.title}</h2>
     <p class="subtitle">${series.subtitle}</p>
     <div class="chart-wrap"><canvas aria-label="${series.title}" role="img"></canvas></div>
+    <div class="time-control">
+      <label for="window-${series.code}">Ventana temporal</label>
+      <input id="window-${series.code}" type="range" min="2" max="${series.data.length}" value="${initialWindow(series)}" step="1">
+      <span class="window-label" aria-live="polite"></span>
+    </div>
     <div class="chart-meta"><span>Ultimo: ${valueFormatter(series)(latest.value)}</span><span>${fullDateFormatter.format(asDate(latest.date))}</span></div>`;
-  const data = recentData(series);
+  let data = series.data.slice(-initialWindow(series));
   const format = valueFormatter(series, true);
   const chart = new Chart(article.querySelector("canvas"), {
     type: "line",
@@ -79,6 +84,18 @@ function createChartCard(series) {
       }
     }
   });
+  const slider = article.querySelector("input[type=range]");
+  const windowLabel = article.querySelector(".window-label");
+  const updateWindow = () => {
+    const count = Number(slider.value);
+    data = series.data.slice(-count);
+    chart.data.labels = data.map(point => point.date);
+    chart.data.datasets[0].data = data.map(point => point.value);
+    windowLabel.textContent = `${monthFormatter.format(asDate(data[0].date))} - ${monthFormatter.format(asDate(data.at(-1).date))}`;
+    chart.update("none");
+  };
+  slider.addEventListener("input", updateWindow);
+  updateWindow();
   charts.push(chart);
   return article;
 }

@@ -20,15 +20,15 @@ SERIES = [
     {"code": "P7", "id": "147.3_ISERVICNAL_DICI_T_22", "title": "IPC servicios", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent", "transform": "percent_change"},
     {"code": "P8", "id": "148.1_IPC_ESTACINAL_DICI_T_25", "title": "IPC estacionales", "subtitle": "Variacion trimestral", "group": "Precios", "format": "percent", "transform": "percent_change"},
     {"code": "A2", "id": "143.3_NO_PR_2004_A_31", "title": "EMAE", "subtitle": "Serie desestacionalizada", "group": "Actividad", "format": "number"},
-    {"code": "S1", "id": "158.1_REPTE_0_0_5", "title": "RIPTE", "subtitle": "Pesos corrientes", "group": "Ingresos", "format": "currency"},
-    {"code": "S5", "id": "58.1_MP_0_M_13", "title": "Haber jubilatorio minimo", "subtitle": "Pesos corrientes", "group": "Ingresos", "format": "currency"},
+    {"code": "S1", "id": "158.1_REPTE_0_0_5", "title": "RIPTE real", "subtitle": "Pesos constantes de noviembre de 2023", "group": "Ingresos", "format": "currency", "deflate": True},
+    {"code": "S5", "id": "58.1_MP_0_M_13", "title": "Haber jubilatorio minimo real", "subtitle": "Pesos constantes de noviembre de 2023", "group": "Ingresos", "format": "currency", "deflate": True},
     {"code": "E1", "id": "42.3_EPH_PUNTUATAL_0_M_30", "title": "Desocupacion EPH", "subtitle": "Serie trimestral", "group": "Empleo", "format": "percent"},
-    {"code": "E2", "id": "42.2_EPDT_0_M_30", "title": "Desocupacion EPH historica", "subtitle": "Serie semestral", "group": "Empleo", "format": "percent"},
-    {"code": "PO1", "id": "150.1_LA_POBREZA_0_D_13", "title": "Linea de pobreza", "subtitle": "Pesos corrientes", "group": "Pobreza", "format": "currency"},
     {"code": "X1", "id": "168.1_T_CAMBIOR_D_0_0_26", "title": "Tipo de cambio BNA vendedor", "subtitle": "Pesos por dolar", "group": "Sector externo", "format": "currency"},
     {"code": "X2", "id": "174.1_RRVAS_IDOS_0_0_36", "title": "Reservas internacionales", "subtitle": "Saldo mensual", "group": "Sector externo", "format": "usd_millions"},
-    {"code": "X3", "id": "174.1_RRVAS_IIOS_0_0_60", "title": "Reservas internacionales", "subtitle": "Promedio de saldos diarios", "group": "Sector externo", "format": "usd_millions"},
 ]
+
+IPC_CODE = "P1"
+BASE_MONTH = "2023-11-01"
 
 
 def fetch_one(item: dict) -> dict:
@@ -89,6 +89,31 @@ def main() -> None:
                 errors.append(f"{item['code']}: se mantuvo la copia anterior")
             else:
                 errors.append(str(exc))
+
+    by_code = {item["code"]: item for item in series}
+    ipc = by_code.get(IPC_CODE)
+    if ipc:
+        price_level = 1.0
+        price_index = {}
+        for point in ipc["data"]:
+            price_level *= 1 + point["value"]
+            price_index[point["date"]] = price_level
+        base_level = price_index.get(BASE_MONTH)
+        if base_level is None:
+            raise RuntimeError(f"No existe IPC para el mes base {BASE_MONTH}")
+        for item in series:
+            if not item.get("deflate"):
+                continue
+            real_data = []
+            for point in item["data"]:
+                level = price_index.get(point["date"])
+                if level is not None:
+                    real_data.append({"date": point["date"], "value": point["value"] * base_level / level})
+            if not real_data:
+                raise RuntimeError(f"No hay meses comparables entre IPC y {item['code']}")
+            item["data"] = real_data
+            item["units"] = "Pesos constantes de noviembre de 2023"
+            item["deflator"] = {"series": ipc["id"], "base_month": BASE_MONTH, "method": "IPC nacional encadenado"}
 
     if not series:
         raise RuntimeError("No se pudo obtener ninguna serie y no existe una copia anterior")

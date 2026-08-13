@@ -1,0 +1,124 @@
+const NAVY = "#0a2540";
+const charts = [];
+
+const monthFormatter = new Intl.DateTimeFormat("es-AR", { month: "short", year: "2-digit", timeZone: "UTC" });
+const fullDateFormatter = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+function asDate(value) {
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function inferPercentScale(series) {
+  if (series.format !== "percent") return 1;
+  const values = series.data.slice(-12).map(point => Math.abs(point.value));
+  return values.length && Math.max(...values) <= 1 ? 100 : 1;
+}
+
+function valueFormatter(series, compact = false) {
+  const scale = inferPercentScale(series);
+  if (series.format === "percent") return value => `${(value * scale).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+  if (series.format === "currency") return value => `$ ${value.toLocaleString("es-AR", { maximumFractionDigits: 0, notation: compact ? "compact" : "standard" })}`;
+  if (series.format === "usd_millions") return value => `USD ${value.toLocaleString("es-AR", { maximumFractionDigits: 0, notation: compact ? "compact" : "standard" })}`;
+  return value => value.toLocaleString("es-AR", { maximumFractionDigits: 1, notation: compact ? "compact" : "standard" });
+}
+
+function recentData(series) {
+  const limits = { day: 365, month: 120, quarter: 48, semester: 30, year: 20 };
+  return series.data.slice(-(limits[series.frequency] || 120));
+}
+
+function renderSummary(seriesList) {
+  const selectedCodes = ["P1", "A2", "S1", "E1", "X1"];
+  const selected = selectedCodes.map(code => seriesList.find(item => item.code === code)).filter(Boolean);
+  document.getElementById("summary").innerHTML = selected.map(series => {
+    const latest = series.data.at(-1);
+    return `<article class="summary-card">
+      <h2>${series.title}</h2>
+      <p class="summary-value">${valueFormatter(series, true)(latest.value)}</p>
+      <p class="summary-date">${fullDateFormatter.format(asDate(latest.date))}</p>
+    </article>`;
+  }).join("");
+}
+
+function createChartCard(series) {
+  const article = document.createElement("article");
+  article.className = "chart-card";
+  article.dataset.group = series.group;
+  const latest = series.data.at(-1);
+  article.innerHTML = `<h2>${series.title}</h2>
+    <p class="subtitle">${series.subtitle}</p>
+    <div class="chart-wrap"><canvas aria-label="${series.title}" role="img"></canvas></div>
+    <div class="chart-meta"><span>Ultimo: ${valueFormatter(series)(latest.value)}</span><span>${fullDateFormatter.format(asDate(latest.date))}</span></div>`;
+  const data = recentData(series);
+  const format = valueFormatter(series, true);
+  const chart = new Chart(article.querySelector("canvas"), {
+    type: "line",
+    data: {
+      labels: data.map(point => point.date),
+      datasets: [{ data: data.map(point => point.value), borderColor: NAVY, borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { displayColors: false, callbacks: { title: items => fullDateFormatter.format(asDate(items[0].label)), label: item => format(item.raw) } }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          border: { display: true, color: NAVY, width: 1 },
+          ticks: { color: NAVY, maxTicksLimit: 7, maxRotation: 0, callback: (_, index) => monthFormatter.format(asDate(data[index].date)) }
+        },
+        y: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: { color: NAVY, maxTicksLimit: 5, callback: value => format(value) }
+        }
+      }
+    }
+  });
+  charts.push(chart);
+  return article;
+}
+
+function renderFilters(seriesList) {
+  const groups = ["Todos", ...new Set(seriesList.map(item => item.group))];
+  const nav = document.getElementById("filters");
+  nav.innerHTML = groups.map((group, index) => `<button class="filter-button${index === 0 ? " active" : ""}" data-filter="${group}">${group}</button>`).join("");
+  nav.addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    nav.querySelectorAll("button").forEach(item => item.classList.toggle("active", item === button));
+    document.querySelectorAll(".chart-card").forEach(card => {
+      card.hidden = button.dataset.filter !== "Todos" && card.dataset.group !== button.dataset.filter;
+    });
+  });
+}
+
+async function init() {
+  try {
+    const response = await fetch(`data/series.json?v=${Date.now()}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    renderSummary(payload.series);
+    renderFilters(payload.series);
+    const container = document.getElementById("charts");
+    payload.series.forEach(series => container.appendChild(createChartCard(series)));
+    const updated = new Date(payload.updated_at);
+    document.getElementById("updated").textContent = `Actualizado ${updated.toLocaleString("es-AR", { dateStyle: "medium", timeStyle: "short" })}`;
+    if (payload.errors?.length) {
+      const warning = document.getElementById("warning");
+      warning.hidden = false;
+      warning.textContent = `La ultima actualizacion mantuvo datos anteriores en ${payload.errors.length} serie(s).`;
+    }
+  } catch (error) {
+    document.getElementById("updated").textContent = "No se pudieron cargar los datos";
+    const warning = document.getElementById("warning");
+    warning.hidden = false;
+    warning.textContent = `Error de carga: ${error.message}`;
+  }
+}
+
+init();

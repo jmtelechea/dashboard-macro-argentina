@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Tablero de indicadores macroeconomicos de Argentina con datos oficiales.">
+  <title>Dashboard macro Argentina</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div>
+      <p class="eyebrow">Datos oficiales</p>
+      <h1>Dashboard macro Argentina</h1>
+      <p class="intro">Una lectura simple de precios, actividad, ingresos, empleo, pobreza y sector externo.</p>
+    </div>
+    <div class="status" aria-live="polite">
+      <span class="status-dot"></span>
+      <span id="updated">Cargando datos...</span>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary" class="summary-grid" aria-label="Ultimos datos"></section>
+    <nav id="filters" class="filters" aria-label="Filtrar indicadores"></nav>
+    <section id="charts" class="charts-grid" aria-label="Graficos"></section>
+    <p id="warning" class="warning" hidden></p>
+  </main>
+
+  <footer>
+    <p>Fuente: API oficial de Series de Tiempo de la Republica Argentina. Los datos se revisan diariamente y cambian cuando los organismos publican una nueva observacion.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

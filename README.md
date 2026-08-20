@@ -11,6 +11,8 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - Base monetaria, prestamos al sector privado y M2 transaccional se deflactan con el IPC nacional encadenado. La base es el primer mes comparable de cada serie: enero de 2017 para base monetaria y prestamos, y enero de 2021 para M2 transaccional.
 - Los cocientes sobre PIB usan el promedio de los saldos diarios de cada trimestre y el PIB nominal a precios corrientes del mismo trimestre.
 - El grafico cambiario combina los limites inferior y superior del regimen de bandas con el tipo de cambio mayorista de referencia.
+- La variacion de reservas por compra de divisas se presenta como promedio movil de cinco observaciones diarias.
+- Las tasas de prestamos personales y de depositos a plazo fijo en pesos se comparan en un mismo grafico; la tasa de plazos fijos en dolares se muestra por separado.
 
 ## Uso local
 

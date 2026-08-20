@@ -33,6 +33,12 @@ SERIES = [
     {"code": "B1187", "id": "1187", "title": "Banda cambiaria: limite inferior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B1188", "id": "1188", "title": "Banda cambiaria: limite superior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B7", "id": "7", "title": "Tasa BADLAR de bancos privados", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra"},
+    {"code": "B74", "id": "74", "title": "Reservas internacionales sin asignaciones DEG 2009", "subtitle": "Saldo diario en millones de dolares", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
+    {"code": "B78", "id": "78", "title": "Compra de divisas del BCRA", "subtitle": "Variacion diaria de reservas", "group": "BCRA", "format": "usd_millions", "provider": "bcra", "hidden": True},
+    {"code": "B84", "id": "84", "title": "Tipo de cambio de valuacion contable", "subtitle": "Pesos por dolar estadounidense", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},
+    {"code": "B144", "id": "144", "title": "Prestamos personales en pesos", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra", "hidden": True},
+    {"code": "B1189", "id": "1189", "title": "Depositos a plazo fijo en pesos", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra", "hidden": True},
+    {"code": "B1193", "id": "1193", "title": "Depositos a plazo fijo en dolares", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra"},
     {"code": "B5", "id": "5", "title": "Tipo de cambio mayorista de referencia", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B1341", "id": "1341", "title": "Prestamos al sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B197", "id": "197", "title": "M2 transaccional del sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
@@ -113,10 +119,51 @@ def make_exchange_chart(by_code: dict) -> dict:
         "frequency": "day",
         "source": "Banco Central de la Republica Argentina",
         "lines": [
-            {"label": component["title"], "data": component["data"]}
-            for component in components
+            {"label": component["title"], "data": component["data"], "color": color}
+            for component, color in zip(components, ("rgb(150, 175, 209)", "#667788", "#0a2540"))
         ],
         "data": components[0]["data"],
+    }
+
+
+def make_rolling_average(item: dict, window: int = 5) -> dict:
+    data = []
+    values = [point["value"] for point in item["data"]]
+    for index in range(window - 1, len(item["data"])):
+        data.append({
+            "date": item["data"][index]["date"],
+            "value": sum(values[index - window + 1:index + 1]) / window,
+        })
+    result = dict(item)
+    result.update({
+        "code": f"{item['code']}_MA{window}",
+        "id": f"{item['id']}_ma{window}",
+        "title": "Compra de divisas del BCRA",
+        "subtitle": f"Promedio movil de {window} observaciones diarias, millones de USD",
+        "hidden": False,
+        "data": data,
+        "calculation": {"source": item["id"], "method": f"Promedio movil de {window} observaciones"},
+    })
+    return result
+
+
+def make_peso_rates_chart(by_code: dict) -> dict:
+    personal = by_code["B144"]
+    term_deposits = by_code["B1189"]
+    return {
+        "code": "TASAS_PESOS",
+        "id": "144_1189",
+        "title": "Tasas de prestamos personales y plazos fijos",
+        "subtitle": "Tasa nominal anual en pesos",
+        "group": "BCRA",
+        "format": "percent",
+        "frequency": "day",
+        "source": "Banco Central de la Republica Argentina",
+        "lines": [
+            {"label": personal["title"], "data": personal["data"], "color": "#0a2540"},
+            {"label": term_deposits["title"], "data": term_deposits["data"], "color": "rgb(150, 175, 209)"},
+        ],
+        "data": term_deposits["data"],
     }
 
 
@@ -267,6 +314,8 @@ def main() -> None:
             derived.extend((make_real_series(source, price_index), make_gdp_series(source, gdp)))
         series.extend(derived)
         series.append(make_exchange_chart(by_code))
+        series.append(make_rolling_average(by_code["B78"]))
+        series.append(make_peso_rates_chart(by_code))
 
     series = [item for item in series if not item.get("hidden")]
 

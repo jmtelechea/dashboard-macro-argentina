@@ -63,7 +63,7 @@ function createChartCard(series) {
     ? series.lines.map((line, index) => ({
         label: line.label,
         data: line.data.filter(point => point.date >= startDate()).map(point => ({ x: point.date, y: point.value })),
-        borderColor: LINE_COLORS[index], borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18
+        borderColor: line.color || LINE_COLORS[index], borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18
       }))
     : [{ data: data.map(point => point.value), borderColor: NAVY, borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18 }];
   const format = valueFormatter(series, true);

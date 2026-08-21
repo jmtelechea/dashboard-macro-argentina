@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import os
 import shutil
@@ -20,6 +21,7 @@ import x13binary
 ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT / "data" / "series.json"
 TASK_WORK_DIR = ROOT / "actividad_sectorial_emae"
+IPC_HISTORY_FILE = ROOT / "extender_ipc_1997" / "ipc_alternativo_1997_2016.csv"
 API_URL = "https://apis.datos.gob.ar/series/api/series"
 BCRA_API_URL = "https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias"
 INDEC_COMEX_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_mensual_indices_comex.xls"
@@ -30,7 +32,7 @@ INDEC_EMAE_SECTORS_ID = "indec_emae_sectorial_sa_nov2023"
 EMAE_SECTORS_CHART_ID = "emae_general_sectorial_sa_nov2023"
 
 SERIES = [
-    {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent"},
+    {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional (serie empalmada)", "subtitle": "Variacion mensual; alternativa hasta dic-16, INDEC desde ene-17", "group": "Precios", "format": "percent"},
     {"code": "P2", "id": "148.3_INUCLEONAL_DICI_M_19", "title": "IPC nucleo", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent", "transform": "percent_change"},
     {"code": "P3", "id": "148.3_IREGULANAL_DICI_M_22", "title": "IPC regulados", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent", "transform": "percent_change"},
     {"code": "P6", "id": "147.3_IBIENESNAL_DICI_T_19", "title": "IPC bienes", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent", "transform": "percent_change"},
@@ -87,6 +89,40 @@ def quarter_key(date: str) -> str:
     return f"{year:04d}-{quarter_month:02d}-01"
 
 
+def extend_ipc_history(item: dict) -> dict:
+    if not IPC_HISTORY_FILE.exists():
+        raise RuntimeError(f"No existe la serie alternativa de IPC: {IPC_HISTORY_FILE}")
+    levels = []
+    with IPC_HISTORY_FILE.open(encoding="utf-8", newline="") as source:
+        for row in csv.DictReader(source):
+            levels.append({"date": row["date"], "value": float(row["level"])})
+    if len(levels) < 2 or levels[0]["date"] != "1997-01-01" or levels[-1]["date"] != "2016-12-01":
+        raise RuntimeError("La serie alternativa de IPC no cubre enero de 1997-diciembre de 2016")
+    alternative = [
+        {"date": current["date"], "value": current["value"] / previous["value"] - 1}
+        for previous, current in zip(levels, levels[1:])
+    ]
+    official = [point for point in item["data"] if point["date"] >= "2017-01-01"]
+    if not official or official[0]["date"] != "2017-01-01":
+        raise RuntimeError("El IPC oficial no comienza en enero de 2017")
+    result = dict(item)
+    result.update({
+        "description": "Variacion mensual del IPC: serie alternativa basada en indices provinciales hasta diciembre de 2016 e IPC nacional del INDEC desde enero de 2017",
+        "units": "Variacion porcentual respecto del mes anterior",
+        "source": "Elaboracion propia basada en indices provinciales hasta diciembre de 2016; INDEC desde enero de 2017",
+        "frequency": "month",
+        "data": alternative + official,
+        "calculation": {
+            "alternative_source": str(IPC_HISTORY_FILE.relative_to(ROOT)).replace("\\", "/"),
+            "alternative_period": "1997-02 a 2016-12",
+            "official_series": item["id"],
+            "official_period": "desde 2017-01",
+            "method": "Variaciones mensuales de la serie alternativa empalmadas con el IPC nacional oficial",
+        },
+    })
+    return result
+
+
 def make_real_series(item: dict, price_index: dict) -> dict:
     comparable = [point for point in item["data"] if month_key(point["date"]) in price_index]
     if not comparable:
@@ -106,7 +142,7 @@ def make_real_series(item: dict, price_index: dict) -> dict:
             {"date": point["date"], "value": point["value"] * base_level / price_index[month_key(point["date"])]}
             for point in comparable
         ],
-        "deflator": {"series": IPC_CODE, "base_month": base_month, "method": "IPC nacional encadenado"},
+        "deflator": {"series": IPC_CODE, "base_month": base_month, "method": "IPC empalmado encadenado"},
     })
     return result
 
@@ -508,7 +544,8 @@ def fetch_one(item: dict) -> dict:
                 last_error = exc
                 time.sleep(2 ** attempt)
         raise RuntimeError(f"No se pudo descargar {item['code']} ({item['id']}): {last_error}")
-    return fetch_datos_argentina(item)
+    result = fetch_datos_argentina(item)
+    return extend_ipc_history(result) if item["code"] == IPC_CODE else result
 
 
 def main() -> None:
@@ -574,7 +611,7 @@ def main() -> None:
                 raise RuntimeError(f"No hay meses comparables entre IPC y {item['code']}")
             item["data"] = real_data
             item["units"] = "Pesos constantes de noviembre de 2023"
-            item["deflator"] = {"series": ipc["id"], "base_month": BASE_MONTH, "method": "IPC nacional encadenado"}
+            item["deflator"] = {"series": IPC_CODE, "base_month": BASE_MONTH, "method": "IPC empalmado encadenado"}
 
         price_level = 1.0
         price_index = {}

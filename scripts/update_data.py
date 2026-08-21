@@ -62,6 +62,7 @@ SERIES = [
     {"code": "B5", "id": "5", "title": "Tipo de cambio mayorista de referencia", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B1341", "id": "1341", "title": "Prestamos al sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B197", "id": "197", "title": "M2 transaccional del sector privado", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
+    {"code": "B198", "id": "198", "title": "Stock de pasivos remunerados", "subtitle": "Saldo diario en millones de pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "chart_type": "bar"},
 ]
 
 IPC_CODE = "P1"

@@ -56,6 +56,7 @@ function renderSummary(seriesList) {
 }
 
 function createChartCard(series) {
+  const chartType = series.chart_type === "bar" ? "bar" : "line";
   const article = document.createElement("article");
   article.className = "chart-card";
   article.dataset.group = series.group;
@@ -77,10 +78,12 @@ function createChartCard(series) {
         data: line.data.filter(point => point.date >= startDate()).map(point => ({ x: point.date, y: point.value })),
         borderColor: line.color || LINE_COLORS[index], borderDash: line.borderDash || [], borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18
       }))
-    : [{ data: data.map(point => point.value), borderColor: NAVY, borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18 }];
+    : chartType === "bar"
+      ? [{ data: data.map(point => point.value), backgroundColor: NAVY, borderWidth: 0, barPercentage: .65, categoryPercentage: 1 }]
+      : [{ data: data.map(point => point.value), borderColor: NAVY, borderWidth: 2.75, pointRadius: 0, pointHoverRadius: 3, tension: .18 }];
   const format = valueFormatter(series, true);
   const chart = new Chart(article.querySelector("canvas"), {
-    type: "line",
+    type: chartType,
     data: {
       labels: data.map(point => point.date),
       datasets

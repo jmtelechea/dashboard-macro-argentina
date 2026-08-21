@@ -64,6 +64,7 @@ function createChartCard(series) {
   article.innerHTML = `<h2>${series.title}</h2>
     <p class="subtitle">${series.subtitle}</p>
     <div class="chart-wrap"><canvas aria-label="${series.title}" role="img"></canvas></div>
+    <p class="chart-source">Fuente: T+1</p>
     <div class="time-control">
       <label for="window-${series.code}">Ventana temporal</label>
       <input id="window-${series.code}" type="range" min="2" max="${series.data.length}" value="${initialWindow(series)}" step="1">

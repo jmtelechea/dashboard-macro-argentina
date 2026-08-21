@@ -25,6 +25,11 @@ SERIES = [
     {"code": "S1", "id": "158.1_REPTE_0_0_5", "title": "RIPTE real", "subtitle": "Pesos constantes de noviembre de 2023", "group": "Ingresos", "format": "currency", "deflate": True},
     {"code": "S5", "id": "58.1_MP_0_M_13", "title": "Haber jubilatorio minimo real", "subtitle": "Pesos constantes de noviembre de 2023", "group": "Ingresos", "format": "currency", "deflate": True},
     {"code": "E1", "id": "42.3_EPH_PUNTUATAL_0_M_30", "title": "Desocupacion EPH", "subtitle": "Serie trimestral", "group": "Empleo", "format": "percent"},
+    {"code": "EXT_EXPORT", "id": "74.3_IET_0_M_16", "title": "Exportaciones", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions", "hidden": True},
+    {"code": "EXT_IMPORT", "id": "74.3_IIT_0_M_25", "title": "Importaciones", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions", "hidden": True},
+    {"code": "EXT_BALANCE", "id": "74.3_ISC_0_M_19", "title": "Saldo comercial", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions"},
+    {"code": "FISC_PRIMARY", "id": "379.9_SUPERAVIT_017__23_94", "title": "Resultado primario", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_FINANCIAL", "id": "379.9_RESULTADO_017__36_89", "title": "Resultado financiero", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
     {"code": "GDP", "id": "4.4_OGP_2004_T_17", "title": "PIB nominal trimestral", "subtitle": "Millones de pesos corrientes", "group": "Auxiliar", "format": "ars_millions", "hidden": True},
     {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B1266", "id": "1266", "title": "Depositos del Gobierno en el BCRA en moneda extranjera", "subtitle": "Saldo diario expresado en pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
@@ -164,6 +169,26 @@ def make_peso_rates_chart(by_code: dict) -> dict:
             {"label": term_deposits["title"], "data": term_deposits["data"], "color": "rgb(150, 175, 209)"},
         ],
         "data": term_deposits["data"],
+    }
+
+
+def make_two_line_chart(by_code: dict, first_code: str, second_code: str, code: str, title: str, subtitle: str, group: str, format_name: str) -> dict:
+    first = by_code[first_code]
+    second = by_code[second_code]
+    return {
+        "code": code,
+        "id": f"{first['id']}_{second['id']}",
+        "title": title,
+        "subtitle": subtitle,
+        "group": group,
+        "format": format_name,
+        "frequency": "month",
+        "source": first["source"],
+        "lines": [
+            {"label": first["title"], "data": first["data"], "color": "#0a2540"},
+            {"label": second["title"], "data": second["data"], "color": "rgb(150, 175, 209)"},
+        ],
+        "data": first["data"],
     }
 
 
@@ -316,6 +341,16 @@ def main() -> None:
         series.append(make_exchange_chart(by_code))
         series.append(make_rolling_average(by_code["B78"]))
         series.append(make_peso_rates_chart(by_code))
+        series.append(make_two_line_chart(
+            by_code, "EXT_EXPORT", "EXT_IMPORT", "TRADE_FLOWS",
+            "Exportaciones e importaciones", "Millones de dolares por mes",
+            "Sector externo", "usd_millions",
+        ))
+        series.append(make_two_line_chart(
+            by_code, "FISC_PRIMARY", "FISC_FINANCIAL", "FISC_RESULTS",
+            "Resultados primario y financiero", "Sector Publico Nacional, millones de pesos por mes",
+            "Fiscal", "ars_millions",
+        ))
 
     series = [item for item in series if not item.get("hidden")]
 

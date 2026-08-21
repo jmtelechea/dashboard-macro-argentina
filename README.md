@@ -10,6 +10,7 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 
 - El grafico de IPC usa una serie empalmada: variaciones calculadas desde un indice alternativo basado en indices provinciales entre febrero de 1997 y diciembre de 2016, e IPC nacional oficial del INDEC desde enero de 2017.
 - Todas las variables reales se deflactan con ese IPC empalmado. RIPTE y haber jubilatorio se expresan en pesos constantes de noviembre de 2023; las series monetarias derivadas toman como base el primer mes comparable de cada serie.
+- El salario del sector privado registrado real se construye con el Indice de Salarios vigente del INDEC desde octubre de 2015 y, hacia atras, con las variaciones de la serie historica hasta octubre de 2001. Se deflacta con el IPC empalmado y se expresa con promedio enero-noviembre de 2023=100.
 - Los cocientes sobre PIB usan el promedio de los saldos diarios de cada trimestre y el PIB nominal a precios corrientes del mismo trimestre.
 - El grafico cambiario combina los limites inferior y superior del regimen de bandas con el tipo de cambio mayorista de referencia.
 - La variacion de reservas por compra de divisas se presenta como promedio movil de cinco observaciones diarias.
@@ -31,4 +32,6 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - API BCRA: `https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias`
 - Excel sectorial del EMAE: `https://www.indec.gob.ar/ftp/cuadros/economia/sh_emae_actividad_base2004.xls`
 - IPC alternativo 1997-2016: `extender_ipc_1997/ipc_alternativo_1997_2016.csv`
+- Indice de Salarios historico: `https://www.indec.gob.ar/ftp/cuadros/sociedad/serie_is_2012.xls`
+- Indice de Salarios vigente: ultimo archivo mensual `variaciones_salarios_MM_AA.xls` publicado por el INDEC.
 - Datos publicados por INDEC, BCRA y otros organismos oficiales.

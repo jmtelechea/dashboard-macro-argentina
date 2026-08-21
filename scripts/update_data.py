@@ -26,10 +26,17 @@ API_URL = "https://apis.datos.gob.ar/series/api/series"
 BCRA_API_URL = "https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias"
 INDEC_COMEX_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_mensual_indices_comex.xls"
 INDEC_EMAE_SECTORS_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/sh_emae_actividad_base2004.xls"
+INDEC_SALARY_HISTORY_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/sociedad/serie_is_2012.xls"
+INDEC_SALARY_CURRENT_URL_TEMPLATE = "https://www.indec.gob.ar/ftp/cuadros/sociedad/variaciones_salarios_{month:02d}_{year:02d}.xls"
 INDEC_COMEX_EXPORT_QUANTITIES_ID = "indec_comex_export_quantities_2004"
 INDEC_COMEX_IMPORT_QUANTITIES_ID = "indec_comex_import_quantities_2004"
 INDEC_EMAE_SECTORS_ID = "indec_emae_sectorial_sa_nov2023"
 EMAE_SECTORS_CHART_ID = "emae_general_sectorial_sa_nov2023"
+SALARY_SOURCE_CODE = "IS_PRIVATE_REGISTERED"
+SALARY_SOURCE_ID = "indec_is_private_registered_spliced_2001"
+SALARY_REAL_CHART_ID = "indec_is_private_registered_real_2001"
+SALARY_REAL_BASE_START = "2023-01-01"
+SALARY_REAL_BASE_END = "2023-11-01"
 
 SERIES = [
     {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional (serie empalmada)", "subtitle": "Variacion mensual; alternativa hasta dic-16, INDEC desde ene-17", "group": "Precios", "format": "percent"},
@@ -69,7 +76,7 @@ SERIES = [
 
 IPC_CODE = "P1"
 BASE_MONTH = "2023-11-01"
-REAL_CODES = {"B1248", "B1341", "B197"}
+REAL_CODES = ("B197", "B1341", "B1248")
 EMAE_SECTOR_COLUMNS = (
     ("Agro (8%)", 2, "#C0504D", 8.1),
     ("Mineria y petroleo (5%)", 4, "#9BBB59", 5.0),
@@ -462,6 +469,145 @@ def fetch_indec_comex_quantities() -> list[dict]:
     raise RuntimeError(f"No se pudo descargar el Excel mensual de comercio exterior: {last_error}")
 
 
+def download_salary_workbooks() -> tuple[xlrd.book.Book, xlrd.book.Book, str]:
+    request = Request(INDEC_SALARY_HISTORY_XLS_URL, headers={"User-Agent": "dashboard-macro-argentina/1.0"})
+    last_error = None
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=45) as response:
+                history = xlrd.open_workbook(file_contents=response.read())
+            break
+        except Exception as exc:
+            last_error = exc
+            time.sleep(2 ** attempt)
+    else:
+        raise RuntimeError(f"No se pudo descargar el Excel historico del Indice de Salarios: {last_error}")
+
+    now = datetime.now(timezone.utc)
+    current = None
+    current_url = None
+    candidate_errors = []
+    for offset in range(13):
+        absolute_month = now.year * 12 + now.month - 1 - offset
+        year, zero_based_month = divmod(absolute_month, 12)
+        month = zero_based_month + 1
+        url = INDEC_SALARY_CURRENT_URL_TEMPLATE.format(month=month, year=year % 100)
+        try:
+            request = Request(url, headers={"User-Agent": "dashboard-macro-argentina/1.0"})
+            with urlopen(request, timeout=45) as response:
+                current = xlrd.open_workbook(file_contents=response.read())
+            current_url = url
+            break
+        except Exception as exc:
+            candidate_errors.append(f"{url}: {exc}")
+    if current is None or current_url is None:
+        raise RuntimeError(f"No se encontro un Excel vigente del Indice de Salarios: {candidate_errors[-1]}")
+    return history, current, current_url
+
+
+def fetch_indec_salary_index() -> dict:
+    months = {
+        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+        "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+    }
+    history_workbook, current_workbook, current_url = download_salary_workbooks()
+    history_sheet = history_workbook.sheet_by_name("Serie historica IS") if "Serie historica IS" in history_workbook.sheet_names() else history_workbook.sheet_by_index(1)
+    historical = []
+    for row in range(7, history_sheet.nrows):
+        date_cell = history_sheet.cell_value(row, 0)
+        value = history_sheet.cell_value(row, 1)
+        if not isinstance(date_cell, (int, float)) or not isinstance(value, (int, float)):
+            continue
+        date = xlrd.xldate_as_datetime(date_cell, history_workbook.datemode).strftime("%Y-%m-01")
+        historical.append({"date": date, "value": float(value)})
+
+    current_sheet = current_workbook.sheet_by_name("Cuadro 1")
+    current = []
+    current_year = None
+    for row in range(10, current_sheet.nrows):
+        year_cell = current_sheet.cell_value(row, 0)
+        if isinstance(year_cell, (int, float)) and year_cell:
+            current_year = int(year_cell)
+        month = months.get(normalize_text(current_sheet.cell_value(row, 1)))
+        value = current_sheet.cell_value(row, 3)
+        if current_year is None or month is None or not isinstance(value, (int, float)):
+            continue
+        current.append({"date": f"{current_year:04d}-{month:02d}-01", "value": float(value)})
+
+    if not historical or historical[0]["date"] != "2001-10-01" or historical[-1]["date"] != "2015-10-01":
+        raise RuntimeError("La serie historica del Indice de Salarios no cubre octubre de 2001-octubre de 2015")
+    if not current or current[0]["date"] != "2015-10-01":
+        raise RuntimeError("La serie vigente del Indice de Salarios no comienza en octubre de 2015")
+    historical_anchor = historical[-1]["value"]
+    current_anchor = current[0]["value"]
+    if historical_anchor == 0:
+        raise RuntimeError("El Indice de Salarios historico tiene un ancla igual a cero")
+    splice_factor = current_anchor / historical_anchor
+    data = [
+        {"date": point["date"], "value": point["value"] * splice_factor}
+        for point in historical[:-1]
+    ] + current
+    return {
+        "code": SALARY_SOURCE_CODE,
+        "id": SALARY_SOURCE_ID,
+        "title": "Indice de salarios del sector privado registrado",
+        "subtitle": "Serie nominal empalmada",
+        "group": "Ingresos",
+        "format": "number",
+        "frequency": "month",
+        "source": "INDEC, Indice de salarios",
+        "hidden": True,
+        "data": data,
+        "calculation": {
+            "current_source": current_url,
+            "historical_source": INDEC_SALARY_HISTORY_XLS_URL,
+            "splice_month": "2015-10",
+            "method": "Serie vigente desde octubre de 2015; hacia atras, variaciones mensuales de la serie historica",
+            "splice_factor": splice_factor,
+        },
+    }
+
+
+def make_real_salary_index(item: dict, price_index: dict) -> dict:
+    raw = [
+        {"date": point["date"], "value": point["value"] / price_index[point["date"]]}
+        for point in item["data"]
+        if point["date"] in price_index
+    ]
+    base_values = [
+        point["value"] for point in raw
+        if SALARY_REAL_BASE_START <= point["date"] <= SALARY_REAL_BASE_END
+    ]
+    if len(base_values) != 11:
+        raise RuntimeError("El Indice de Salarios real no contiene los once meses de enero-noviembre de 2023")
+    base_value = sum(base_values) / len(base_values)
+    if base_value == 0:
+        raise RuntimeError("La base del Indice de Salarios real es cero")
+    return {
+        "code": "IS_PRIVATE_REGISTERED_REAL",
+        "id": SALARY_REAL_CHART_ID,
+        "title": "Salario privado registrado real",
+        "subtitle": "Indice, promedio enero-noviembre de 2023=100",
+        "group": "Ingresos",
+        "format": "number",
+        "frequency": "month",
+        "source": "INDEC, Indice de salarios; elaboracion propia con IPC empalmado",
+        "data": [
+            {"date": point["date"], "value": point["value"] / base_value * 100}
+            for point in raw
+        ],
+        "deflator": {"series": IPC_CODE, "method": "IPC empalmado encadenado"},
+        "calculation": {
+            "nominal_series": item["id"],
+            "real_method": "Indice de salarios nominal / nivel del IPC empalmado",
+            "base": "Promedio enero-noviembre de 2023=100",
+            "base_months": 11,
+            "sources": item["calculation"],
+        },
+    }
+
+
 def fetch_bcra(item: dict) -> dict:
     points = []
     offset = 0
@@ -588,6 +734,15 @@ def main() -> None:
         else:
             errors.append(str(exc))
 
+    try:
+        series.append(fetch_indec_salary_index())
+    except Exception as exc:
+        if SALARY_REAL_CHART_ID in previous:
+            series.append(previous[SALARY_REAL_CHART_ID])
+            errors.append("IS_PRIVATE_REGISTERED_REAL: se mantuvo la copia anterior")
+        else:
+            errors.append(str(exc))
+
     by_code = {item["code"]: item for item in series}
     ipc = by_code.get(IPC_CODE)
     if ipc:
@@ -644,6 +799,16 @@ def main() -> None:
         sectors = by_code.get("EMAE_SECTORS_SOURCE")
         if sectors:
             series.append(make_emae_sectors_chart(by_code["A2"], sectors))
+        salary_source = by_code.get(SALARY_SOURCE_CODE)
+        if salary_source:
+            try:
+                series.append(make_real_salary_index(salary_source, price_index))
+            except Exception as exc:
+                if SALARY_REAL_CHART_ID in previous:
+                    series.append(previous[SALARY_REAL_CHART_ID])
+                    errors.append("IS_PRIVATE_REGISTERED_REAL: se mantuvo la copia anterior")
+                else:
+                    raise RuntimeError(f"No se pudo calcular el Indice de Salarios real: {exc}") from exc
 
     series = [item for item in series if not item.get("hidden")]
 
@@ -658,7 +823,7 @@ def main() -> None:
     }
     DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
     DATA_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Actualizadas {len(series)} de {len(SERIES)} series")
+    print(f"Actualizadas {len(series)} series visibles")
     if errors:
         print("Advertencias:")
         for error in errors:

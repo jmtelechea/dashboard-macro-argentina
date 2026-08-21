@@ -17,7 +17,8 @@ DATA_FILE = ROOT / "data" / "series.json"
 API_URL = "https://apis.datos.gob.ar/series/api/series"
 BCRA_API_URL = "https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias"
 INDEC_COMEX_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_mensual_indices_comex.xls"
-INDEC_COMEX_QUANTITIES_ID = "indec_comex_quantities_2004"
+INDEC_COMEX_EXPORT_QUANTITIES_ID = "indec_comex_export_quantities_2004"
+INDEC_COMEX_IMPORT_QUANTITIES_ID = "indec_comex_import_quantities_2004"
 
 SERIES = [
     {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent"},
@@ -202,7 +203,7 @@ def normalize_text(value: object) -> str:
     return "".join(character for character in text if not unicodedata.combining(character))
 
 
-def fetch_indec_comex_quantities() -> dict:
+def fetch_indec_comex_quantities() -> list[dict]:
     months = {
         "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
         "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
@@ -236,21 +237,29 @@ def fetch_indec_comex_quantities() -> dict:
                 import_data.append({"date": date, "value": float(import_value)})
             if not export_data or len(export_data) != len(import_data):
                 raise RuntimeError("El Excel no contiene las dos series de cantidades esperadas")
-            return {
-                "code": "TRADE_QUANTITIES",
-                "id": INDEC_COMEX_QUANTITIES_ID,
-                "title": "Cantidades exportadas e importadas",
-                "subtitle": "Indices de cantidad, base 2004=100",
+            common = {
+                "subtitle": "Indice de cantidad, base 2004=100",
                 "group": "Sector externo",
                 "format": "number",
                 "frequency": "month",
                 "source": "INDEC, indices de comercio exterior",
-                "lines": [
-                    {"label": "Cantidades exportadas", "data": export_data, "color": "#0a2540"},
-                    {"label": "Cantidades importadas", "data": import_data, "color": "rgb(150, 175, 209)"},
-                ],
-                "data": export_data,
             }
+            return [
+                {
+                    **common,
+                    "code": "EXPORT_QUANTITIES",
+                    "id": INDEC_COMEX_EXPORT_QUANTITIES_ID,
+                    "title": "Cantidades exportadas",
+                    "data": export_data,
+                },
+                {
+                    **common,
+                    "code": "IMPORT_QUANTITIES",
+                    "id": INDEC_COMEX_IMPORT_QUANTITIES_ID,
+                    "title": "Cantidades importadas",
+                    "data": import_data,
+                },
+            ]
         except Exception as exc:
             last_error = exc
             time.sleep(2 ** attempt)
@@ -364,11 +373,12 @@ def main() -> None:
                 errors.append(str(exc))
 
     try:
-        series.append(fetch_indec_comex_quantities())
+        series.extend(fetch_indec_comex_quantities())
     except Exception as exc:
-        if INDEC_COMEX_QUANTITIES_ID in previous:
-            series.append(previous[INDEC_COMEX_QUANTITIES_ID])
-            errors.append("TRADE_QUANTITIES: se mantuvo la copia anterior")
+        quantity_ids = (INDEC_COMEX_EXPORT_QUANTITIES_ID, INDEC_COMEX_IMPORT_QUANTITIES_ID)
+        if all(series_id in previous for series_id in quantity_ids):
+            series.extend(previous[series_id] for series_id in quantity_ids)
+            errors.append("COMEX_QUANTITIES: se mantuvo la copia anterior")
         else:
             errors.append(str(exc))
 

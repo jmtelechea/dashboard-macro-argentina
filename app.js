@@ -30,6 +30,18 @@ function initialWindow(series) {
   return Math.min(series.data.length, limits[series.frequency] || 120);
 }
 
+function visibleYBounds(datasets) {
+  const values = datasets.flatMap(dataset => dataset.data
+    .map(point => typeof point === "number" ? point : point.y)
+    .filter(Number.isFinite));
+  if (!values.length) return {};
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = maximum - minimum;
+  const padding = range > 0 ? range * .05 : Math.max(Math.abs(maximum) * .05, 1);
+  return { min: minimum - padding, max: maximum + padding };
+}
+
 function renderSummary(seriesList) {
   const selectedCodes = ["P1", "A2", "S1", "E1", "X1"];
   const selected = selectedCodes.map(code => seriesList.find(item => item.code === code)).filter(Boolean);
@@ -108,6 +120,9 @@ function createChartCard(series) {
     } else {
       chart.data.datasets[0].data = data.map(point => point.value);
     }
+    const bounds = visibleYBounds(chart.data.datasets);
+    chart.options.scales.y.min = bounds.min;
+    chart.options.scales.y.max = bounds.max;
     windowLabel.textContent = `${monthFormatter.format(asDate(data[0].date))} - ${monthFormatter.format(asDate(data.at(-1).date))}`;
     chart.update("none");
   };

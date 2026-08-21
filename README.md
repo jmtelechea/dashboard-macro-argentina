@@ -13,6 +13,8 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - El grafico cambiario combina los limites inferior y superior del regimen de bandas con el tipo de cambio mayorista de referencia.
 - La variacion de reservas por compra de divisas se presenta como promedio movil de cinco observaciones diarias.
 - Las tasas de prestamos personales y de depositos a plazo fijo en pesos se comparan en un mismo grafico; la tasa de plazos fijos en dolares se muestra por separado.
+- Exportaciones e importaciones mensuales se comparan en un mismo grafico; el saldo comercial se presenta por separado, en millones de dolares.
+- Los resultados primario y financiero mensuales corresponden al Sector Publico Nacional, base caja y metodologia 2017.
 
 ## Uso local
 

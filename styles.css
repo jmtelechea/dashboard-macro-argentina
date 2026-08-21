@@ -67,7 +67,8 @@ h1 { margin: 0; color: var(--navy); font-size: clamp(30px, 4vw, 48px); letter-sp
 .chart-card h2 { margin: 0; color: var(--navy); font-size: 18px; }
 .chart-card .subtitle { margin: 5px 0 20px; color: var(--muted); font-size: 13px; }
 .chart-wrap { position: relative; height: 280px; }
-.time-control { display: grid; grid-template-columns: auto minmax(90px, 1fr) auto; align-items: center; gap: 10px; margin-top: 14px; }
+.chart-source { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+.time-control { display: grid; grid-template-columns: auto minmax(90px, 1fr) auto; align-items: center; gap: 10px; margin-top: 8px; }
 .time-control label, .window-label { color: var(--muted); font-size: 11px; }
 .window-label { min-width: 112px; text-align: right; }
 .time-control input[type="range"] { width: 100%; accent-color: var(--navy); cursor: pointer; }

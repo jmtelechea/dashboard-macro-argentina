@@ -60,6 +60,7 @@ SERIES = [
     {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B1266", "id": "1266", "title": "Depositos del Gobierno en el BCRA en moneda extranjera", "subtitle": "Saldo diario expresado en pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
     {"code": "B1265", "id": "1265", "title": "Depositos del Gobierno en el BCRA en pesos", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
+    {"code": "B107", "id": "107", "title": "Depositos totales en dolares", "subtitle": "Sectores publico y privado no financieros, saldo diario en millones de dolares", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
     {"code": "B1244", "id": "1244", "title": "Reservas internacionales BCRA", "subtitle": "Saldo diario", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
     {"code": "B1187", "id": "1187", "title": "Banda cambiaria: limite inferior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B1188", "id": "1188", "title": "Banda cambiaria: limite superior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},

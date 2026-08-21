@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import json
 import time
+import unicodedata
 from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import xlrd
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT / "data" / "series.json"
 API_URL = "https://apis.datos.gob.ar/series/api/series"
 BCRA_API_URL = "https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias"
+INDEC_COMEX_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_mensual_indices_comex.xls"
+INDEC_COMEX_QUANTITIES_ID = "indec_comex_quantities_2004"
 
 SERIES = [
     {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent"},
@@ -192,6 +197,66 @@ def make_two_line_chart(by_code: dict, first_code: str, second_code: str, code: 
     }
 
 
+def normalize_text(value: object) -> str:
+    text = unicodedata.normalize("NFKD", str(value).strip().lower())
+    return "".join(character for character in text if not unicodedata.combining(character))
+
+
+def fetch_indec_comex_quantities() -> dict:
+    months = {
+        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+        "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+    }
+    request = Request(INDEC_COMEX_XLS_URL, headers={"User-Agent": "dashboard-macro-argentina/1.0"})
+    last_error = None
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=45) as response:
+                workbook = xlrd.open_workbook(file_contents=response.read())
+            sheet = workbook.sheet_by_index(0)
+            export_data = []
+            import_data = []
+            current_year = None
+            for row in range(5, sheet.nrows):
+                year_cell = str(sheet.cell_value(row, 0)).strip()
+                if year_cell:
+                    digits = "".join(character for character in year_cell if character.isdigit())
+                    if len(digits) >= 4:
+                        current_year = int(digits[:4])
+                month = months.get(normalize_text(sheet.cell_value(row, 1)))
+                if current_year is None or month is None:
+                    continue
+                export_value = sheet.cell_value(row, 4)
+                import_value = sheet.cell_value(row, 8)
+                if not isinstance(export_value, (int, float)) or not isinstance(import_value, (int, float)):
+                    continue
+                date = f"{current_year:04d}-{month:02d}-01"
+                export_data.append({"date": date, "value": float(export_value)})
+                import_data.append({"date": date, "value": float(import_value)})
+            if not export_data or len(export_data) != len(import_data):
+                raise RuntimeError("El Excel no contiene las dos series de cantidades esperadas")
+            return {
+                "code": "TRADE_QUANTITIES",
+                "id": INDEC_COMEX_QUANTITIES_ID,
+                "title": "Cantidades exportadas e importadas",
+                "subtitle": "Indices de cantidad, base 2004=100",
+                "group": "Sector externo",
+                "format": "number",
+                "frequency": "month",
+                "source": "INDEC, indices de comercio exterior",
+                "lines": [
+                    {"label": "Cantidades exportadas", "data": export_data, "color": "#0a2540"},
+                    {"label": "Cantidades importadas", "data": import_data, "color": "rgb(150, 175, 209)"},
+                ],
+                "data": export_data,
+            }
+        except Exception as exc:
+            last_error = exc
+            time.sleep(2 ** attempt)
+    raise RuntimeError(f"No se pudo descargar el Excel mensual de comercio exterior: {last_error}")
+
+
 def fetch_bcra(item: dict) -> dict:
     points = []
     offset = 0
@@ -297,6 +362,15 @@ def main() -> None:
                 errors.append(f"{item['code']}: se mantuvo la copia anterior")
             else:
                 errors.append(str(exc))
+
+    try:
+        series.append(fetch_indec_comex_quantities())
+    except Exception as exc:
+        if INDEC_COMEX_QUANTITIES_ID in previous:
+            series.append(previous[INDEC_COMEX_QUANTITIES_ID])
+            errors.append("TRADE_QUANTITIES: se mantuvo la copia anterior")
+        else:
+            errors.append(str(exc))
 
     by_code = {item["code"]: item for item in series}
     ipc = by_code.get(IPC_CODE)

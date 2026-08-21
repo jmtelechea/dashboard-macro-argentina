@@ -14,6 +14,7 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - La variacion de reservas por compra de divisas se presenta como promedio movil de cinco observaciones diarias.
 - Las tasas de prestamos personales y de depositos a plazo fijo en pesos se comparan en un mismo grafico; la tasa de plazos fijos en dolares se muestra por separado.
 - Exportaciones e importaciones mensuales se comparan en un mismo grafico; el saldo comercial se presenta por separado, en millones de dolares.
+- Los indices mensuales de cantidades exportadas e importadas, base 2004=100, se leen directamente del Excel que actualiza el INDEC.
 - Los resultados primario y financiero mensuales corresponden al Sector Publico Nacional, base caja y metodologia 2017.
 
 ## Uso local

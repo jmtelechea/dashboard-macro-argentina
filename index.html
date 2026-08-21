@@ -6,7 +6,13 @@
   <meta name="description" content="Tablero de indicadores macroeconomicos de Argentina con fuentes oficiales y una extension historica alternativa del IPC.">
   <title>Dashboard macro Argentina</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="styles.css">
+  <script>
+    window.dashboardAssetVersion = Date.now();
+    const dashboardStyles = document.createElement("link");
+    dashboardStyles.rel = "stylesheet";
+    dashboardStyles.href = `styles.css?v=${window.dashboardAssetVersion}`;
+    document.head.appendChild(dashboardStyles);
+  </script>
 </head>
 <body>
   <header class="site-header">
@@ -33,6 +39,10 @@
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="app.js"></script>
+  <script>
+    const dashboardApp = document.createElement("script");
+    dashboardApp.src = `app.js?v=${window.dashboardAssetVersion}`;
+    document.body.appendChild(dashboardApp);
+  </script>
 </body>
 </html>

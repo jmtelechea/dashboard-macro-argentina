@@ -1,6 +1,6 @@
 # Dashboard macro Argentina
 
-Pagina unica con indicadores macroeconomicos y sociales de Argentina obtenidos desde la API oficial de Series de Tiempo y la API de Estadisticas del BCRA.
+Pagina unica con indicadores macroeconomicos y sociales de Argentina obtenidos principalmente de fuentes oficiales. El IPC incorpora una extension historica alternativa explicitamente identificada.
 
 ## Actualizacion
 
@@ -8,7 +8,8 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 
 ## Metodologia
 
-- Base monetaria, prestamos al sector privado y M2 transaccional se deflactan con el IPC nacional encadenado. La base es el primer mes comparable de cada serie: enero de 2017 para base monetaria y prestamos, y enero de 2021 para M2 transaccional.
+- El grafico de IPC usa una serie empalmada: variaciones calculadas desde un indice alternativo basado en indices provinciales entre febrero de 1997 y diciembre de 2016, e IPC nacional oficial del INDEC desde enero de 2017.
+- Todas las variables reales se deflactan con ese IPC empalmado. RIPTE y haber jubilatorio se expresan en pesos constantes de noviembre de 2023; las series monetarias derivadas toman como base el primer mes comparable de cada serie.
 - Los cocientes sobre PIB usan el promedio de los saldos diarios de cada trimestre y el PIB nominal a precios corrientes del mismo trimestre.
 - El grafico cambiario combina los limites inferior y superior del regimen de bandas con el tipo de cambio mayorista de referencia.
 - La variacion de reservas por compra de divisas se presenta como promedio movil de cinco observaciones diarias.
@@ -29,4 +30,5 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - API: `https://apis.datos.gob.ar/series/api/series`
 - API BCRA: `https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias`
 - Excel sectorial del EMAE: `https://www.indec.gob.ar/ftp/cuadros/economia/sh_emae_actividad_base2004.xls`
+- IPC alternativo 1997-2016: `extender_ipc_1997/ipc_alternativo_1997_2016.csv`
 - Datos publicados por INDEC, BCRA y otros organismos oficiales.

@@ -35,8 +35,10 @@ EMAE_SECTORS_CHART_ID = "emae_general_sectorial_sa_nov2023"
 SALARY_SOURCE_CODE = "IS_PRIVATE_REGISTERED"
 SALARY_SOURCE_ID = "indec_is_private_registered_spliced_2001"
 SALARY_REAL_CHART_ID = "indec_is_private_registered_real_2001"
+SALARY_REAL_COMPARISON_CHART_ID = "indec_is_sector_real_comparison_2022"
 SALARY_REAL_BASE_START = "2023-01-01"
 SALARY_REAL_BASE_END = "2023-11-01"
+SALARY_COMPARISON_START = "2022-01-01"
 
 SERIES = [
     {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional (serie empalmada)", "subtitle": "Variacion mensual; alternativa hasta dic-16, INDEC desde ene-17", "group": "Precios", "format": "percent"},
@@ -535,10 +537,43 @@ def fetch_indec_salary_index() -> dict:
             continue
         current.append({"date": f"{current_year:04d}-{month:02d}-01", "value": float(value)})
 
+    public_sheet = current_workbook.sheet_by_name("Cuadro 3")
+    public_national = []
+    public_provincial = []
+    public_year = None
+    national_level = 100.0
+    provincial_level = 100.0
+    for row in range(7, public_sheet.nrows):
+        year_cell = public_sheet.cell_value(row, 0)
+        if isinstance(year_cell, (int, float)) and year_cell:
+            public_year = int(year_cell)
+        month = months.get(normalize_text(public_sheet.cell_value(row, 1)))
+        national_change = public_sheet.cell_value(row, 2)
+        provincial_change = public_sheet.cell_value(row, 5)
+        if (
+            public_year is None or month is None
+            or not isinstance(national_change, (int, float))
+            or not isinstance(provincial_change, (int, float))
+        ):
+            continue
+        date = f"{public_year:04d}-{month:02d}-01"
+        national_level *= 1 + float(national_change) / 100
+        provincial_level *= 1 + float(provincial_change) / 100
+        public_national.append({"date": date, "value": national_level})
+        public_provincial.append({"date": date, "value": provincial_level})
+
     if not historical or historical[0]["date"] != "2001-10-01" or historical[-1]["date"] != "2015-10-01":
         raise RuntimeError("La serie historica del Indice de Salarios no cubre octubre de 2001-octubre de 2015")
     if not current or current[0]["date"] != "2015-10-01":
         raise RuntimeError("La serie vigente del Indice de Salarios no comienza en octubre de 2015")
+    if (
+        not public_national or not public_provincial
+        or public_national[0]["date"] != SALARY_COMPARISON_START
+        or public_provincial[0]["date"] != SALARY_COMPARISON_START
+        or public_national[-1]["date"] != current[-1]["date"]
+        or public_provincial[-1]["date"] != current[-1]["date"]
+    ):
+        raise RuntimeError("Las series salariales publicas no cubren enero de 2022 hasta el ultimo mes vigente")
     historical_anchor = historical[-1]["value"]
     current_anchor = current[0]["value"]
     if historical_anchor == 0:
@@ -559,6 +594,8 @@ def fetch_indec_salary_index() -> dict:
         "source": "INDEC, Indice de salarios",
         "hidden": True,
         "data": data,
+        "public_national": public_national,
+        "public_provincial": public_provincial,
         "calculation": {
             "current_source": current_url,
             "historical_source": INDEC_SALARY_HISTORY_XLS_URL,
@@ -604,6 +641,66 @@ def make_real_salary_index(item: dict, price_index: dict) -> dict:
             "base": "Promedio enero-noviembre de 2023=100",
             "base_months": 11,
             "sources": item["calculation"],
+        },
+    }
+
+
+def make_real_salary_comparison(item: dict, price_index: dict) -> dict:
+    nominal_lines = [
+        ("Privado registrado", [point for point in item["data"] if point["date"] >= SALARY_COMPARISON_START], "#0a2540"),
+        ("Publico nacional", item["public_national"], "rgb(150, 175, 209)"),
+        ("Publico provincial", item["public_provincial"], "#667788"),
+    ]
+    lines = []
+    expected_dates = None
+    for label, nominal_data, color in nominal_lines:
+        raw = [
+            {"date": point["date"], "value": point["value"] / price_index[point["date"]]}
+            for point in nominal_data
+            if point["date"] in price_index
+        ]
+        dates = [point["date"] for point in raw]
+        if expected_dates is None:
+            expected_dates = dates
+        elif dates != expected_dates:
+            raise RuntimeError("Las tres series salariales no tienen la misma cobertura mensual")
+        base_values = [
+            point["value"] for point in raw
+            if SALARY_REAL_BASE_START <= point["date"] <= SALARY_REAL_BASE_END
+        ]
+        if len(base_values) != 11:
+            raise RuntimeError(f"La serie {label} no contiene los once meses de la base")
+        base_value = sum(base_values) / len(base_values)
+        if base_value == 0:
+            raise RuntimeError(f"La base de la serie {label} es cero")
+        lines.append({
+            "label": label,
+            "color": color,
+            "data": [
+                {"date": point["date"], "value": point["value"] / base_value * 100}
+                for point in raw
+            ],
+        })
+    return {
+        "code": "IS_SECTOR_REAL_COMPARISON",
+        "id": SALARY_REAL_COMPARISON_CHART_ID,
+        "title": "Salarios reales por sector",
+        "subtitle": "Indice, promedio enero-noviembre de 2023=100",
+        "group": "Ingresos",
+        "format": "number",
+        "frequency": "month",
+        "source": "INDEC, Indice de salarios; elaboracion propia con IPC empalmado",
+        "data": lines[0]["data"],
+        "lines": lines,
+        "deflator": {"series": IPC_CODE, "method": "IPC empalmado encadenado"},
+        "calculation": {
+            "nominal_private_series": item["id"],
+            "public_source": item["calculation"]["current_source"],
+            "public_columns": "Cuadro 3: variacion mensual del sector publico nacional y provincial",
+            "public_method": "Indices encadenados a partir de las variaciones mensuales desde enero de 2022",
+            "real_method": "Indice salarial nominal / nivel del IPC empalmado",
+            "base": "Promedio enero-noviembre de 2023=100 para cada serie",
+            "base_months": 11,
         },
     }
 
@@ -740,6 +837,9 @@ def main() -> None:
         if SALARY_REAL_CHART_ID in previous:
             series.append(previous[SALARY_REAL_CHART_ID])
             errors.append("IS_PRIVATE_REGISTERED_REAL: se mantuvo la copia anterior")
+            if SALARY_REAL_COMPARISON_CHART_ID in previous:
+                series.append(previous[SALARY_REAL_COMPARISON_CHART_ID])
+                errors.append("IS_SECTOR_REAL_COMPARISON: se mantuvo la copia anterior")
         else:
             errors.append(str(exc))
 
@@ -809,6 +909,14 @@ def main() -> None:
                     errors.append("IS_PRIVATE_REGISTERED_REAL: se mantuvo la copia anterior")
                 else:
                     raise RuntimeError(f"No se pudo calcular el Indice de Salarios real: {exc}") from exc
+            try:
+                series.append(make_real_salary_comparison(salary_source, price_index))
+            except Exception as exc:
+                if SALARY_REAL_COMPARISON_CHART_ID in previous:
+                    series.append(previous[SALARY_REAL_COMPARISON_CHART_ID])
+                    errors.append("IS_SECTOR_REAL_COMPARISON: se mantuvo la copia anterior")
+                else:
+                    raise RuntimeError(f"No se pudo calcular la comparacion de salarios reales: {exc}") from exc
 
     series = [item for item in series if not item.get("hidden")]
 

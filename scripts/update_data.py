@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+import tempfile
 import time
 import unicodedata
 from datetime import datetime, timezone
@@ -10,15 +14,20 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import xlrd
+import x13binary
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT / "data" / "series.json"
+TASK_WORK_DIR = ROOT / "actividad_sectorial_emae"
 API_URL = "https://apis.datos.gob.ar/series/api/series"
 BCRA_API_URL = "https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias"
 INDEC_COMEX_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/serie_mensual_indices_comex.xls"
+INDEC_EMAE_SECTORS_XLS_URL = "https://www.indec.gob.ar/ftp/cuadros/economia/sh_emae_actividad_base2004.xls"
 INDEC_COMEX_EXPORT_QUANTITIES_ID = "indec_comex_export_quantities_2004"
 INDEC_COMEX_IMPORT_QUANTITIES_ID = "indec_comex_import_quantities_2004"
+INDEC_EMAE_SECTORS_ID = "indec_emae_sectorial_sa_nov2023"
+EMAE_SECTORS_CHART_ID = "emae_general_sectorial_sa_nov2023"
 
 SERIES = [
     {"code": "P1", "id": "145.3_INGNACUAL_DICI_M_38", "title": "IPC nacional", "subtitle": "Variacion mensual", "group": "Precios", "format": "percent"},
@@ -58,6 +67,13 @@ SERIES = [
 IPC_CODE = "P1"
 BASE_MONTH = "2023-11-01"
 REAL_CODES = {"B1248", "B1341", "B197"}
+EMAE_SECTOR_COLUMNS = (
+    ("Agro (8%)", 2, "#C0504D", 8.1),
+    ("Mineria y petroleo (5%)", 4, "#9BBB59", 5.0),
+    ("Industria (19%)", 5, "#4BACC6", 18.9),
+    ("Finanzas (3,1%)", 11, "#8064A2", 3.1),
+    ("Comercio (12%)", 8, "#F79646", 12.4),
+)
 
 
 def month_key(date: str) -> str:
@@ -201,6 +217,149 @@ def make_two_line_chart(by_code: dict, first_code: str, second_code: str, code: 
 def normalize_text(value: object) -> str:
     text = unicodedata.normalize("NFKD", str(value).strip().lower())
     return "".join(character for character in text if not unicodedata.combining(character))
+
+
+def run_x13(values: list[float], start_year: int, start_month: int) -> list[float]:
+    formatted = [f"{value:.12g}" for value in values]
+    data_lines = "\n  ".join(" ".join(formatted[index:index + 8]) for index in range(0, len(formatted), 8))
+    spec = f"""series{{
+ title=\"EMAE sectorial\"
+ start={start_year}.{start_month}
+ period=12
+ data=({data_lines})
+}}
+transform{{function=auto}}
+automdl{{}}
+x11{{save=(d11)}}
+"""
+    TASK_WORK_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="emae_x13_", dir=TASK_WORK_DIR) as temp_name:
+        temp = Path(temp_name)
+        stem = temp / "sector"
+        stem.with_suffix(".spc").write_text(spec, encoding="ascii")
+        source_binary = Path(x13binary.find_x13_bin())
+        binary = temp / ("x13as.exe" if os.name == "nt" else "x13as")
+        shutil.copy2(source_binary, binary)
+        if os.name != "nt":
+            binary.chmod(binary.stat().st_mode | 0o111)
+        result = subprocess.run(
+            [str(binary), stem.name], cwd=temp, capture_output=True, text=True, timeout=120,
+        )
+        output = stem.with_suffix(".d11")
+        if result.returncode != 0 or not output.exists():
+            detail = (result.stderr or result.stdout).strip()[-800:]
+            raise RuntimeError(f"X-13 no genero la serie desestacionalizada: {detail}")
+        adjusted = []
+        for line in output.read_text(encoding="ascii", errors="ignore").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and len(parts[0]) == 6 and parts[0].isdigit():
+                adjusted.append(float(parts[1]))
+        if len(adjusted) != len(values):
+            raise RuntimeError(f"X-13 devolvio {len(adjusted)} valores para {len(values)} observaciones")
+        return adjusted
+
+
+def fetch_indec_emae_sectors() -> dict:
+    months = {
+        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+        "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+    }
+    request = Request(INDEC_EMAE_SECTORS_XLS_URL, headers={"User-Agent": "dashboard-macro-argentina/1.0"})
+    last_error = None
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=45) as response:
+                workbook = xlrd.open_workbook(file_contents=response.read())
+            if "Tabla Letras" not in workbook.sheet_names():
+                raise RuntimeError("El Excel sectorial no contiene la hoja Tabla Letras")
+            sheet = workbook.sheet_by_name("Tabla Letras")
+            dates = []
+            values_by_column = {column: [] for _, column, _, _ in EMAE_SECTOR_COLUMNS}
+            current_year = None
+            for row in range(4, sheet.nrows):
+                year_cell = sheet.cell_value(row, 0)
+                if isinstance(year_cell, (int, float)) and year_cell:
+                    current_year = int(year_cell)
+                month = months.get(normalize_text(sheet.cell_value(row, 1)))
+                if current_year is None or month is None:
+                    continue
+                row_values = [sheet.cell_value(row, column) for column in values_by_column]
+                if not all(isinstance(value, (int, float)) for value in row_values):
+                    continue
+                dates.append(f"{current_year:04d}-{month:02d}-01")
+                for column, value in zip(values_by_column, row_values):
+                    values_by_column[column].append(float(value))
+            if not dates or dates[0] != "2004-01-01":
+                raise RuntimeError("La serie sectorial no comienza en enero de 2004")
+            if BASE_MONTH not in dates:
+                raise RuntimeError(f"El Excel sectorial no contiene el mes base {BASE_MONTH}")
+            base_index = dates.index(BASE_MONTH)
+            lines = []
+            for label, column, color, weight in EMAE_SECTOR_COLUMNS:
+                adjusted = run_x13(values_by_column[column], 2004, 1)
+                base_value = adjusted[base_index]
+                if base_value == 0:
+                    raise RuntimeError(f"La serie {label} tiene base cero en noviembre de 2023")
+                lines.append({
+                    "label": label,
+                    "color": color,
+                    "weight_2004": weight,
+                    "data": [
+                        {"date": date, "value": value / base_value * 100}
+                        for date, value in zip(dates, adjusted)
+                    ],
+                })
+            return {
+                "code": "EMAE_SECTORS_SOURCE",
+                "id": INDEC_EMAE_SECTORS_ID,
+                "title": "Actividad economica por sectores",
+                "subtitle": "Series desestacionalizadas, noviembre de 2023=100",
+                "group": "Actividad",
+                "format": "number",
+                "frequency": "month",
+                "source": "INDEC, Estimador Mensual de Actividad Economica por sector",
+                "seasonal_adjustment": "X-13ARIMA-SEATS, X-11 final seasonal adjustment (d11)",
+                "base_month": BASE_MONTH,
+                "weights_base_2004": {label: weight for label, _, _, weight in EMAE_SECTOR_COLUMNS},
+                "lines": lines,
+                "data": lines[0]["data"],
+                "hidden": True,
+            }
+        except Exception as exc:
+            last_error = exc
+            time.sleep(2 ** attempt)
+    raise RuntimeError(f"No se pudo procesar el Excel sectorial del EMAE: {last_error}")
+
+
+def make_emae_sectors_chart(emae: dict, sectors: dict) -> dict:
+    emae_by_date = {point["date"]: point["value"] for point in emae["data"]}
+    base_value = emae_by_date.get(BASE_MONTH)
+    if base_value is None or base_value == 0:
+        raise RuntimeError(f"El EMAE general no contiene el mes base {BASE_MONTH}")
+    emae_line = {
+        "label": "EMAE",
+        "color": "#111111",
+        "borderDash": [8, 6],
+        "data": [
+            {"date": point["date"], "value": point["value"] / base_value * 100}
+            for point in emae["data"]
+        ],
+    }
+    result = dict(sectors)
+    result.update({
+        "code": "EMAE_SECTORS",
+        "id": EMAE_SECTORS_CHART_ID,
+        "hidden": False,
+        "lines": [emae_line, *sectors["lines"]],
+        "data": sectors["data"],
+        "calculation": {
+            "base": "Noviembre de 2023=100 para cada serie",
+            "general": emae["id"],
+            "sectors": sectors["id"],
+        },
+    })
+    return result
 
 
 def fetch_indec_comex_quantities() -> list[dict]:
@@ -382,6 +541,15 @@ def main() -> None:
         else:
             errors.append(str(exc))
 
+    try:
+        series.append(fetch_indec_emae_sectors())
+    except Exception as exc:
+        if EMAE_SECTORS_CHART_ID in previous:
+            series.append(previous[EMAE_SECTORS_CHART_ID])
+            errors.append("EMAE_SECTORS: se mantuvo la copia anterior")
+        else:
+            errors.append(str(exc))
+
     by_code = {item["code"]: item for item in series}
     ipc = by_code.get(IPC_CODE)
     if ipc:
@@ -435,6 +603,9 @@ def main() -> None:
             "Resultados primario y financiero", "Sector Publico Nacional, millones de pesos por mes",
             "Fiscal", "ars_millions",
         ))
+        sectors = by_code.get("EMAE_SECTORS_SOURCE")
+        if sectors:
+            series.append(make_emae_sectors_chart(by_code["A2"], sectors))
 
     series = [item for item in series if not item.get("hidden")]
 

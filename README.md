@@ -20,7 +20,7 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - Exportaciones e importaciones mensuales se comparan en un mismo grafico; el saldo comercial se presenta por separado, en millones de dolares.
 - Los indices mensuales de cantidades exportadas e importadas, base 2004=100, se presentan en graficos separados y se leen directamente del Excel que actualiza el INDEC.
 - El grafico de actividad economica por sectores combina el EMAE general desestacionalizado con cinco sectores del Excel mensual del INDEC. Los sectores se ajustan cada dia con X-13ARIMA-SEATS (ajuste final X-11, tabla d11) y todas las lineas se expresan con noviembre de 2023=100. La leyenda muestra las ponderaciones del ano base 2004 redondeadas como en la referencia visual.
-- Los resultados primario y financiero mensuales corresponden al Sector Publico Nacional, base caja y metodologia 2017.
+- El grafico fiscal usa el resultado primario sin rentas y el resultado financiero del Sector Publico Nacional, base caja y metodologia 2017. Para hacer comparables periodos con inflacion muy distinta, presenta la suma movil de 12 meses como porcentaje del PIB nominal: el denominador es el promedio de los niveles trimestrales anualizados correspondientes a esos 12 meses.
 
 ## Uso local
 

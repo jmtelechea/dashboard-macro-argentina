@@ -54,8 +54,8 @@ SERIES = [
     {"code": "EXT_EXPORT", "id": "74.3_IET_0_M_16", "title": "Exportaciones", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions", "hidden": True},
     {"code": "EXT_IMPORT", "id": "74.3_IIT_0_M_25", "title": "Importaciones", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions", "hidden": True},
     {"code": "EXT_BALANCE", "id": "74.3_ISC_0_M_19", "title": "Saldo comercial", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions"},
-    {"code": "FISC_PRIMARY", "id": "379.9_SUPERAVIT_017__23_94", "title": "Resultado primario", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
-    {"code": "FISC_FINANCIAL", "id": "379.9_RESULTADO_017__36_89", "title": "Resultado financiero", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_PRIMARY", "id": "379.9_RESULTADO_017__31_73", "title": "Resultado primario sin rentas", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_FINANCIAL", "id": "379.9_RESULTADO_017__18_38", "title": "Resultado financiero", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
     {"code": "GDP", "id": "4.4_OGP_2004_T_17", "title": "PIB nominal trimestral", "subtitle": "Millones de pesos corrientes", "group": "Auxiliar", "format": "ars_millions", "hidden": True},
     {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B1266", "id": "1266", "title": "Depositos del Gobierno en el BCRA en moneda extranjera", "subtitle": "Saldo diario expresado en pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
@@ -258,6 +258,63 @@ def make_two_line_chart(by_code: dict, first_code: str, second_code: str, code: 
             {"label": second["title"], "data": second["data"], "color": "rgb(150, 175, 209)"},
         ],
         "data": first["data"],
+    }
+
+
+def add_months(date: str, offset: int) -> str:
+    year, month = map(int, date[:7].split("-"))
+    month_index = year * 12 + month - 1 + offset
+    return f"{month_index // 12:04d}-{month_index % 12 + 1:02d}-01"
+
+
+def make_fiscal_gdp_chart(by_code: dict, gdp: dict) -> dict:
+    primary = by_code["FISC_PRIMARY"]
+    financial = by_code["FISC_FINANCIAL"]
+    gdp_monthly = {
+        add_months(point["date"], offset): point["value"]
+        for point in gdp["data"]
+        for offset in range(3)
+    }
+
+    def rolling_ratio(item: dict) -> list[dict]:
+        points = item["data"]
+        result = []
+        for index in range(11, len(points)):
+            window = points[index - 11:index + 1]
+            expected_dates = [add_months(window[0]["date"], offset) for offset in range(12)]
+            actual_dates = [point["date"] for point in window]
+            if actual_dates != expected_dates or any(date not in gdp_monthly for date in actual_dates):
+                continue
+            rolling_result = sum(point["value"] for point in window)
+            rolling_gdp = sum(gdp_monthly[date] for date in actual_dates) / 12
+            if rolling_gdp:
+                result.append({"date": window[-1]["date"], "value": rolling_result / rolling_gdp})
+        return result
+
+    primary_data = rolling_ratio(primary)
+    financial_data = rolling_ratio(financial)
+    if not primary_data or not financial_data:
+        raise RuntimeError("No hay datos suficientes para calcular los resultados fiscales sobre PIB")
+    return {
+        "code": "FISC_RESULTS",
+        "id": f"{primary['id']}_{financial['id']}_rolling12_gdp",
+        "title": "Resultados primario y financiero",
+        "subtitle": "Acumulado de 12 meses como porcentaje del PIB nominal",
+        "group": "Fiscal",
+        "format": "percent",
+        "frequency": "month",
+        "source": primary["source"],
+        "lines": [
+            {"label": primary["title"], "data": primary_data, "color": "#0a2540"},
+            {"label": financial["title"], "data": financial_data, "color": "rgb(150, 175, 209)"},
+        ],
+        "data": primary_data,
+        "calculation": {
+            "primary_series": primary["id"],
+            "financial_series": financial["id"],
+            "denominator": gdp["id"],
+            "method": "Suma movil de 12 resultados mensuales / promedio del PIB nominal trimestral anualizado correspondiente a esos 12 meses",
+        },
     }
 
 
@@ -892,11 +949,7 @@ def main() -> None:
             "Exportaciones e importaciones", "Millones de dolares por mes",
             "Sector externo", "usd_millions",
         ))
-        series.append(make_two_line_chart(
-            by_code, "FISC_PRIMARY", "FISC_FINANCIAL", "FISC_RESULTS",
-            "Resultados primario y financiero", "Sector Publico Nacional, millones de pesos por mes",
-            "Fiscal", "ars_millions",
-        ))
+        series.append(make_fiscal_gdp_chart(by_code, gdp))
         sectors = by_code.get("EMAE_SECTORS_SOURCE")
         if sectors:
             series.append(make_emae_sectors_chart(by_code["A2"], sectors))

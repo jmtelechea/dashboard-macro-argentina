@@ -65,6 +65,7 @@ SERIES = [
     {"code": "B1187", "id": "1187", "title": "Banda cambiaria: limite inferior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B1188", "id": "1188", "title": "Banda cambiaria: limite superior", "subtitle": "Pesos por dolar", "group": "BCRA", "format": "exchange_rate", "provider": "bcra", "hidden": True},
     {"code": "B7", "id": "7", "title": "Tasa BADLAR de bancos privados", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra"},
+    {"code": "B150", "id": "150", "title": "Tasa de pases a 1 dia", "subtitle": "Tasa nominal anual", "group": "BCRA", "format": "percent", "provider": "bcra"},
     {"code": "B74", "id": "74", "title": "Reservas internacionales sin asignaciones DEG 2009", "subtitle": "Saldo diario en millones de dolares", "group": "BCRA", "format": "usd_millions", "provider": "bcra"},
     {"code": "B78", "id": "78", "title": "Compra de divisas del BCRA", "subtitle": "Variacion diaria de reservas", "group": "BCRA", "format": "usd_millions", "provider": "bcra", "hidden": True},
     {"code": "B84", "id": "84", "title": "Tipo de cambio de valuacion contable", "subtitle": "Pesos por dolar estadounidense", "group": "BCRA", "format": "exchange_rate", "provider": "bcra"},

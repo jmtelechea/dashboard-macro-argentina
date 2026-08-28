@@ -324,11 +324,11 @@ def normalize_text(value: object) -> str:
     return "".join(character for character in text if not unicodedata.combining(character))
 
 
-def run_x13(values: list[float], start_year: int, start_month: int) -> list[float]:
+def run_x13(values: list[float], start_year: int, start_month: int, title: str = "EMAE sectorial") -> list[float]:
     formatted = [f"{value:.12g}" for value in values]
     data_lines = "\n  ".join(" ".join(formatted[index:index + 8]) for index in range(0, len(formatted), 8))
     spec = f"""series{{
- title=\"EMAE sectorial\"
+ title=\"{title}\"
  start={start_year}.{start_month}
  period=12
  data=({data_lines})
@@ -362,6 +362,37 @@ x11{{save=(d11)}}
         if len(adjusted) != len(values):
             raise RuntimeError(f"X-13 devolvio {len(adjusted)} valores para {len(values)} observaciones")
         return adjusted
+
+
+def make_seasonally_adjusted_real_loans(item: dict) -> dict:
+    monthly = defaultdict(list)
+    for point in item["data"]:
+        monthly[month_key(point["date"])].append(point["value"])
+    dates = sorted(monthly)
+    if not dates:
+        raise RuntimeError("No hay datos de prestamos reales para desestacionalizar")
+    expected_dates = [add_months(dates[0], offset) for offset in range(len(dates))]
+    if dates != expected_dates:
+        raise RuntimeError("La serie mensual de prestamos reales tiene meses faltantes")
+    values = [sum(monthly[date]) / len(monthly[date]) for date in dates]
+    start_year, start_month = map(int, dates[0][:7].split("-"))
+    adjusted = run_x13(values, start_year, start_month, "Prestamos privados reales")
+    result = dict(item)
+    result.update({
+        "id": f"{item['id']}_sa",
+        "subtitle": "En millones de pesos constantes",
+        "frequency": "month",
+        "data": [
+            {"date": date, "value": value}
+            for date, value in zip(dates, adjusted)
+        ],
+        "seasonal_adjustment": "X-13ARIMA-SEATS, X-11 final seasonal adjustment (d11)",
+        "calculation": {
+            "monthly_aggregation": "Promedio mensual de saldos diarios reales",
+            "seasonal_adjustment": "X-13ARIMA-SEATS, tabla d11",
+        },
+    })
+    return result
 
 
 def fetch_indec_emae_sectors() -> dict:
@@ -940,7 +971,10 @@ def main() -> None:
             source = by_code.get(code)
             if not source:
                 raise RuntimeError(f"No se pudo obtener la serie fuente {code}")
-            derived.extend((make_real_series(source, price_index), make_gdp_series(source, gdp)))
+            real_series = make_real_series(source, price_index)
+            if code == "B1341":
+                real_series = make_seasonally_adjusted_real_loans(real_series)
+            derived.extend((real_series, make_gdp_series(source, gdp)))
         series.extend(derived)
         series.append(make_exchange_chart(by_code))
         series.append(make_rolling_average(by_code["B78"]))

@@ -17,6 +17,7 @@ GitHub Actions ejecuta `scripts/update_data.py` todos los dias a las 10:17 UTC. 
 - La variacion de reservas por compra de divisas se presenta como promedio movil de cinco observaciones diarias.
 - Las tasas de prestamos personales y de depositos a plazo fijo en pesos se comparan en un mismo grafico; la tasa de plazos fijos en dolares se muestra por separado.
 - La tasa de pases entre terceros a un dia corresponde a la serie diaria 150 del BCRA y se muestra como tasa nominal anual.
+- Los prestamos al sector privado reales se agregan como promedio mensual de saldos diarios y se desestacionalizan con X-13ARIMA-SEATS (ajuste final X-11, tabla d11).
 - Los depositos totales en dolares corresponden a los sectores publico y privado no financieros y se muestran como saldo diario en millones de dolares, tal como los publica la serie 107 del BCRA.
 - Exportaciones e importaciones mensuales se comparan en un mismo grafico; el saldo comercial se presenta por separado, en millones de dolares.
 - Los indices mensuales de cantidades exportadas e importadas, base 2004=100, se presentan en graficos separados y se leen directamente del Excel que actualiza el INDEC.

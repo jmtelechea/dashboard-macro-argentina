@@ -3,6 +3,7 @@ const LINE_COLORS = ["rgb(150, 175, 209)", "#667788", NAVY];
 const charts = [];
 
 const monthFormatter = new Intl.DateTimeFormat("es-AR", { month: "short", year: "2-digit", timeZone: "UTC" });
+const dayMonthFormatter = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", timeZone: "UTC" });
 const fullDateFormatter = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 function asDate(value) {
@@ -28,6 +29,14 @@ function valueFormatter(series, compact = false) {
 function initialWindow(series) {
   const limits = { day: 365, month: 120, quarter: 48, semester: 30, year: 20 };
   return Math.min(series.data.length, limits[series.frequency] || 120);
+}
+
+function axisDateFormatter(series, visibleData) {
+  if (series.frequency !== "day" || visibleData.length < 2) return monthFormatter;
+  const first = asDate(visibleData[0].date);
+  const last = asDate(visibleData.at(-1).date);
+  const visibleDays = (last - first) / 86400000;
+  return visibleDays <= 180 ? dayMonthFormatter : monthFormatter;
 }
 
 function visibleYBounds(datasets) {
@@ -101,7 +110,7 @@ function createChartCard(series) {
         x: {
           grid: { display: false },
           border: { display: true, color: NAVY, width: 1 },
-          ticks: { color: NAVY, maxTicksLimit: 7, maxRotation: 0, callback: (_, index) => monthFormatter.format(asDate(data[index].date)) }
+          ticks: { color: NAVY, maxTicksLimit: 7, maxRotation: 0, callback: (_, index) => axisDateFormatter(series, data).format(asDate(data[index].date)) }
         },
         y: {
           grid: { display: false },

@@ -56,6 +56,14 @@ SERIES = [
     {"code": "EXT_BALANCE", "id": "74.3_ISC_0_M_19", "title": "Saldo comercial", "subtitle": "Millones de dolares", "group": "Sector externo", "format": "usd_millions"},
     {"code": "FISC_PRIMARY", "id": "379.9_RESULTADO_017__31_73", "title": "Resultado primario sin rentas", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
     {"code": "FISC_FINANCIAL", "id": "379.9_RESULTADO_017__18_38", "title": "Resultado financiero", "subtitle": "Sector Publico Nacional, millones de pesos", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_REVENUE_NOMINAL", "id": "172.3_TL_RECAION_M_0_0_17", "title": "Recaudacion total", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_INCOME_1993_2006", "id": "379.7_ING_CORR_1006__18_96", "title": "Ingresos corrientes 1993-2006", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_INCOME_2007_2014", "id": "379.8_ING_CORR_2014__18_7", "title": "Ingresos corrientes 2007-2014", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_INCOME_2015", "id": "379.9_ING_CORR_2017__13_2", "title": "Ingresos corrientes desde 2015", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_SPENDING_1993_2006", "id": "379.7_GTOS_PRIMA006__44_3", "title": "Gasto primario 1993-2006", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_SPENDING_2007_2014", "id": "379.8_GTOS_PRIMA014__44_35", "title": "Gasto primario 2007-2014", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "FISC_SPENDING_2015", "id": "379.9_GTOS_PRIMA017__39_96", "title": "Gasto primario desde 2015", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
+    {"code": "ENERGY_SUBSIDIES_NOMINAL", "id": "452.2_ENERGIAGIA_0_T_7_56", "title": "Subsidios a la energia", "subtitle": "Millones de pesos corrientes", "group": "Fiscal", "format": "ars_millions", "hidden": True},
     {"code": "GDP", "id": "4.4_OGP_2004_T_17", "title": "PIB nominal trimestral", "subtitle": "Millones de pesos corrientes", "group": "Auxiliar", "format": "ars_millions", "hidden": True},
     {"code": "B1248", "id": "1248", "title": "Base monetaria", "subtitle": "Saldo diario", "group": "BCRA", "format": "ars_millions", "provider": "bcra", "derive_real": True, "derive_gdp": True, "hidden": True},
     {"code": "B1266", "id": "1266", "title": "Depositos del Gobierno en el BCRA en moneda extranjera", "subtitle": "Saldo diario expresado en pesos", "group": "BCRA", "format": "ars_millions", "provider": "bcra"},
@@ -327,8 +335,9 @@ def normalize_text(value: object) -> str:
 def run_x13(values: list[float], start_year: int, start_month: int, title: str = "EMAE sectorial") -> list[float]:
     formatted = [f"{value:.12g}" for value in values]
     data_lines = "\n  ".join(" ".join(formatted[index:index + 8]) for index in range(0, len(formatted), 8))
+    x13_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
     spec = f"""series{{
- title=\"{title}\"
+ title=\"{x13_title}\"
  start={start_year}.{start_month}
  period=12
  data=({data_lines})
@@ -392,6 +401,92 @@ def make_seasonally_adjusted_real_loans(item: dict) -> dict:
             "seasonal_adjustment": "X-13ARIMA-SEATS, tabla d11",
         },
     })
+    return result
+
+
+def ensure_complete_monthly_series(data: list[dict], label: str) -> None:
+    dates = [month_key(point["date"]) for point in data]
+    if not dates:
+        raise RuntimeError(f"No hay datos para {label}")
+    if len(dates) != len(set(dates)):
+        raise RuntimeError(f"Hay meses duplicados en {label}")
+    expected = [add_months(dates[0], offset) for offset in range(len(dates))]
+    if dates != expected:
+        raise RuntimeError(f"Hay meses faltantes o desordenados en {label}")
+
+
+def concatenate_fiscal_segments(items: list[dict], code: str, title: str) -> dict:
+    data = []
+    for item in items:
+        ensure_complete_monthly_series(item["data"], item["code"])
+        data.extend({"date": month_key(point["date"]), "value": point["value"]} for point in item["data"])
+    ensure_complete_monthly_series(data, code)
+    return {
+        "code": code,
+        "id": "_".join(item["id"] for item in items),
+        "title": title,
+        "subtitle": "Millones de pesos corrientes",
+        "group": "Fiscal",
+        "format": "ars_millions",
+        "frequency": "month",
+        "source": items[-1]["source"],
+        "data": data,
+        "calculation": {
+            "source_series": [item["id"] for item in items],
+            "method": "Concatenacion de niveles nominales oficiales sin ajuste de los quiebres metodologicos",
+            "methodological_breaks": ["2007-01", "2015-01"],
+        },
+    }
+
+
+def normalize_ipc_to_2014(price_index: dict[str, float]) -> dict[str, float]:
+    base_values = [value for date, value in price_index.items() if date.startswith("2014-")]
+    if len(base_values) != 12:
+        raise RuntimeError("El IPC empalmado no contiene los doce meses de 2014")
+    base_average = sum(base_values) / len(base_values)
+    return {date: value / base_average * 100 for date, value in price_index.items()}
+
+
+def make_real_fiscal_series(item: dict, price_index_2014: dict[str, float], code: str,
+                            title: str, seasonal_adjustment: bool) -> dict:
+    real_data = []
+    for point in item["data"]:
+        date = month_key(point["date"])
+        price_level = price_index_2014.get(date)
+        if price_level is not None:
+            real_data.append({"date": date, "value": point["value"] * 100 / price_level})
+    ensure_complete_monthly_series(real_data, code)
+    if seasonal_adjustment:
+        start_year, start_month = map(int, real_data[0]["date"][:7].split("-"))
+        adjusted = run_x13(
+            [point["value"] for point in real_data], start_year, start_month, title,
+        )
+        real_data = [
+            {"date": point["date"], "value": value}
+            for point, value in zip(real_data, adjusted)
+        ]
+    result = {
+        "code": code,
+        "id": f"{item['id']}_real_2014" + ("_sa" if seasonal_adjustment else ""),
+        "title": title,
+        "subtitle": "Millones de pesos a precios de 2014",
+        "group": "Fiscal",
+        "format": "ars_millions",
+        "frequency": "month",
+        "source": f"{item['source']}; elaboracion propia con IPC empalmado",
+        "data": real_data,
+        "deflator": {
+            "series": IPC_CODE,
+            "base": "promedio 2014=100",
+            "method": "Nivel nominal dividido por el IPC empalmado y multiplicado por 100",
+        },
+    }
+    calculation = dict(item.get("calculation", {}))
+    calculation["real_method"] = "Nivel nominal / IPC empalmado base promedio 2014=100"
+    if seasonal_adjustment:
+        result["seasonal_adjustment"] = "X-13ARIMA-SEATS, X-11 final seasonal adjustment (d11)"
+        calculation["seasonal_adjustment"] = "X-13ARIMA-SEATS sobre toda la serie real, tabla d11"
+    result["calculation"] = calculation
     return result
 
 
@@ -941,6 +1036,10 @@ def main() -> None:
         for point in ipc["data"]:
             price_level *= 1 + point["value"]
             price_index[point["date"]] = price_level
+        fiscal_price_index = dict(price_index)
+        if ipc["data"]:
+            fiscal_price_index[add_months(ipc["data"][0]["date"], -1)] = 1.0
+        price_index_2014 = normalize_ipc_to_2014(fiscal_price_index)
         base_level = price_index.get(BASE_MONTH)
         if base_level is None:
             raise RuntimeError(f"No existe IPC para el mes base {BASE_MONTH}")
@@ -985,6 +1084,42 @@ def main() -> None:
             "Sector externo", "usd_millions",
         ))
         series.append(make_fiscal_gdp_chart(by_code, gdp))
+        fiscal_income = concatenate_fiscal_segments(
+            [
+                by_code["FISC_INCOME_1993_2006"],
+                by_code["FISC_INCOME_2007_2014"],
+                by_code["FISC_INCOME_2015"],
+            ],
+            "FISC_INCOME_NOMINAL_SPLICED",
+            "Ingresos fiscales",
+        )
+        fiscal_spending = concatenate_fiscal_segments(
+            [
+                by_code["FISC_SPENDING_1993_2006"],
+                by_code["FISC_SPENDING_2007_2014"],
+                by_code["FISC_SPENDING_2015"],
+            ],
+            "FISC_SPENDING_NOMINAL_SPLICED",
+            "Gasto primario",
+        )
+        series.extend([
+            make_real_fiscal_series(
+                by_code["FISC_REVENUE_NOMINAL"], price_index_2014,
+                "FISC_REVENUE_REAL_SA", "Recaudaci\u00f3n total desestacionalizada en t\u00e9rminos reales", True,
+            ),
+            make_real_fiscal_series(
+                fiscal_income, price_index_2014,
+                "FISC_INCOME_REAL_SA", "Ingresos fiscales desestacionalizados en t\u00e9rminos reales", True,
+            ),
+            make_real_fiscal_series(
+                fiscal_spending, price_index_2014,
+                "FISC_SPENDING_REAL_SA", "Gasto primario desestacionalizado en t\u00e9rminos reales", True,
+            ),
+            make_real_fiscal_series(
+                by_code["ENERGY_SUBSIDIES_NOMINAL"], price_index_2014,
+                "ENERGY_SUBSIDIES_REAL", "Subsidios a la energ\u00eda en t\u00e9rminos reales", False,
+            ),
+        ])
         sectors = by_code.get("EMAE_SECTORS_SOURCE")
         if sectors:
             series.append(make_emae_sectors_chart(by_code["A2"], sectors))

@@ -332,10 +332,13 @@ def normalize_text(value: object) -> str:
     return "".join(character for character in text if not unicodedata.combining(character))
 
 
-def run_x13(values: list[float], start_year: int, start_month: int, title: str = "EMAE sectorial") -> list[float]:
+def run_x13_tables(values: list[float], start_year: int, start_month: int,
+                   title: str, tables: tuple[str, ...], enhanced: bool = False) -> dict[str, list[float]]:
     formatted = [f"{value:.12g}" for value in values]
     data_lines = "\n  ".join(" ".join(formatted[index:index + 8]) for index in range(0, len(formatted), 8))
     x13_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
+    regression_spec = "regression{aictest=(td easter)}\noutlier{}\n" if enhanced else ""
+    saved_tables = " ".join(tables)
     spec = f"""series{{
  title=\"{x13_title}\"
  start={start_year}.{start_month}
@@ -343,8 +346,8 @@ def run_x13(values: list[float], start_year: int, start_month: int, title: str =
  data=({data_lines})
 }}
 transform{{function=auto}}
-automdl{{}}
-x11{{save=(d11)}}
+{regression_spec}automdl{{}}
+x11{{save=({saved_tables})}}
 """
     TASK_WORK_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="emae_x13_", dir=TASK_WORK_DIR) as temp_name:
@@ -359,18 +362,36 @@ x11{{save=(d11)}}
         result = subprocess.run(
             [str(binary), stem.name], cwd=temp, capture_output=True, text=True, timeout=120,
         )
-        output = stem.with_suffix(".d11")
-        if result.returncode != 0 or not output.exists():
+        outputs = {table: stem.with_suffix(f".{table}") for table in tables}
+        if result.returncode != 0 or not all(output.exists() for output in outputs.values()):
             detail = (result.stderr or result.stdout).strip()[-800:]
-            raise RuntimeError(f"X-13 no genero la serie desestacionalizada: {detail}")
-        adjusted = []
-        for line in output.read_text(encoding="ascii", errors="ignore").splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and len(parts[0]) == 6 and parts[0].isdigit():
-                adjusted.append(float(parts[1]))
-        if len(adjusted) != len(values):
-            raise RuntimeError(f"X-13 devolvio {len(adjusted)} valores para {len(values)} observaciones")
-        return adjusted
+            raise RuntimeError(f"X-13 no genero las tablas solicitadas: {detail}")
+        parsed = {}
+        for table, output in outputs.items():
+            table_values = []
+            for line in output.read_text(encoding="ascii", errors="ignore").splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and len(parts[0]) == 6 and parts[0].isdigit():
+                    table_values.append(float(parts[1]))
+            if len(table_values) != len(values):
+                raise RuntimeError(
+                    f"X-13 devolvio {len(table_values)} valores en {table} para {len(values)} observaciones"
+                )
+            parsed[table] = table_values
+        return parsed
+
+
+def run_x13(values: list[float], start_year: int, start_month: int,
+            title: str = "EMAE sectorial") -> list[float]:
+    return run_x13_tables(values, start_year, start_month, title, ("d11",))["d11"]
+
+
+def run_enhanced_x13_with_trend(values: list[float], start_year: int,
+                                start_month: int, title: str) -> tuple[list[float], list[float]]:
+    tables = run_x13_tables(
+        values, start_year, start_month, title, ("d11", "d12"), enhanced=True,
+    )
+    return tables["d11"], tables["d12"]
 
 
 def make_seasonally_adjusted_real_loans(item: dict) -> dict:
@@ -456,14 +477,20 @@ def make_real_fiscal_series(item: dict, price_index_2014: dict[str, float], code
         if price_level is not None:
             real_data.append({"date": date, "value": point["value"] * 100 / price_level})
     ensure_complete_monthly_series(real_data, code)
+    trend_data = None
     if seasonal_adjustment:
         start_year, start_month = map(int, real_data[0]["date"][:7].split("-"))
-        adjusted = run_x13(
+        adjusted, trend = run_enhanced_x13_with_trend(
             [point["value"] for point in real_data], start_year, start_month, title,
         )
+        dates = [point["date"] for point in real_data]
         real_data = [
-            {"date": point["date"], "value": value}
-            for point, value in zip(real_data, adjusted)
+            {"date": date, "value": value}
+            for date, value in zip(dates, adjusted)
+        ]
+        trend_data = [
+            {"date": date, "value": value}
+            for date, value in zip(dates, trend)
         ]
     result = {
         "code": code,
@@ -484,8 +511,19 @@ def make_real_fiscal_series(item: dict, price_index_2014: dict[str, float], code
     calculation = dict(item.get("calculation", {}))
     calculation["real_method"] = "Nivel nominal / IPC empalmado base promedio 2014=100"
     if seasonal_adjustment:
-        result["seasonal_adjustment"] = "X-13ARIMA-SEATS, X-11 final seasonal adjustment (d11)"
-        calculation["seasonal_adjustment"] = "X-13ARIMA-SEATS sobre toda la serie real, tabla d11"
+        result["lines"] = [
+            {"label": "Serie desestacionalizada", "data": real_data, "color": "#0A2540"},
+            {"label": "Tendencia-ciclo", "data": trend_data, "color": "rgb(150, 175, 209)"},
+        ]
+        result["seasonal_adjustment"] = (
+            "X-13ARIMA-SEATS con seleccion automatica de efectos calendario y deteccion de valores atipicos; "
+            "ajuste final X-11 (d11) y tendencia-ciclo final (d12)"
+        )
+        calculation["seasonal_adjustment"] = (
+            "X-13ARIMA-SEATS sobre toda la serie real, efectos calendario por AIC, valores atipicos automaticos, "
+            "serie desestacionalizada d11"
+        )
+        calculation["trend_cycle"] = "Tendencia-ciclo final X-11, tabla d12"
     result["calculation"] = calculation
     return result
 

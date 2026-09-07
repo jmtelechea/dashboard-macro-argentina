@@ -512,8 +512,8 @@ def make_real_fiscal_series(item: dict, price_index_2014: dict[str, float], code
     calculation["real_method"] = "Nivel nominal / IPC empalmado base promedio 2014=100"
     if seasonal_adjustment:
         result["lines"] = [
-            {"label": "Serie desestacionalizada", "data": real_data, "color": "#0A2540"},
-            {"label": "Tendencia-ciclo", "data": trend_data, "color": "rgb(150, 175, 209)"},
+            {"label": "Serie desestacionalizada", "data": real_data, "color": "rgb(150, 175, 209)"},
+            {"label": "Tendencia-ciclo", "data": trend_data, "color": "#0A2540"},
         ]
         result["seasonal_adjustment"] = (
             "X-13ARIMA-SEATS con seleccion automatica de efectos calendario y deteccion de valores atipicos; "
@@ -1155,7 +1155,7 @@ def main() -> None:
             ),
             make_real_fiscal_series(
                 by_code["ENERGY_SUBSIDIES_NOMINAL"], price_index_2014,
-                "ENERGY_SUBSIDIES_REAL", "Subsidios a la energ\u00eda en t\u00e9rminos reales", False,
+                "ENERGY_SUBSIDIES_REAL_SA", "Subsidios a la energ\u00eda en t\u00e9rminos reales", True,
             ),
         ])
         sectors = by_code.get("EMAE_SECTORS_SOURCE")

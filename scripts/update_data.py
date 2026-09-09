@@ -480,14 +480,10 @@ def make_real_fiscal_series(item: dict, price_index_2014: dict[str, float], code
     trend_data = None
     if seasonal_adjustment:
         start_year, start_month = map(int, real_data[0]["date"][:7].split("-"))
-        adjusted, trend = run_enhanced_x13_with_trend(
+        _, trend = run_enhanced_x13_with_trend(
             [point["value"] for point in real_data], start_year, start_month, title,
         )
         dates = [point["date"] for point in real_data]
-        real_data = [
-            {"date": date, "value": value}
-            for date, value in zip(dates, adjusted)
-        ]
         trend_data = [
             {"date": date, "value": value}
             for date, value in zip(dates, trend)
@@ -512,16 +508,16 @@ def make_real_fiscal_series(item: dict, price_index_2014: dict[str, float], code
     calculation["real_method"] = "Nivel nominal / IPC empalmado base promedio 2014=100"
     if seasonal_adjustment:
         result["lines"] = [
-            {"label": "Serie desestacionalizada", "data": real_data, "color": "rgb(150, 175, 209)"},
+            {"label": "Serie original", "data": real_data, "color": "rgb(150, 175, 209)"},
             {"label": "Tendencia-ciclo", "data": trend_data, "color": "#0A2540"},
         ]
         result["seasonal_adjustment"] = (
             "X-13ARIMA-SEATS con seleccion automatica de efectos calendario y deteccion de valores atipicos; "
-            "ajuste final X-11 (d11) y tendencia-ciclo final (d12)"
+            "el grafico conserva la serie real original y muestra la tendencia-ciclo final X-11 (d12)"
         )
         calculation["seasonal_adjustment"] = (
             "X-13ARIMA-SEATS sobre toda la serie real, efectos calendario por AIC, valores atipicos automaticos, "
-            "serie desestacionalizada d11"
+            "usado para estimar la tendencia-ciclo; la serie desestacionalizada d11 no se grafica"
         )
         calculation["trend_cycle"] = "Tendencia-ciclo final X-11, tabla d12"
     result["calculation"] = calculation

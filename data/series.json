@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-12T13:38:41+00:00",
+  "updated_at": "2026-09-13T14:24:19+00:00",
   "api": "https://apis.datos.gob.ar/series/api/series",
   "errors": [],
   "series": [
@@ -6041,6 +6041,10 @@
         {
           "date": "2026-06-01",
           "value": 456098.60313085275
+        },
+        {
+          "date": "2026-07-01",
+          "value": 453686.1381809459
         }
       ],
       "deflator": {

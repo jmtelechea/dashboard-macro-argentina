@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-19T13:57:55+00:00",
+  "updated_at": "2026-09-20T14:15:17+00:00",
   "api": "https://apis.datos.gob.ar/series/api/series",
   "errors": [],
   "series": [
@@ -7868,6 +7868,10 @@
         {
           "date": "2026-01-01",
           "value": 0.078
+        },
+        {
+          "date": "2026-04-01",
+          "value": 0.079
         }
       ]
     },

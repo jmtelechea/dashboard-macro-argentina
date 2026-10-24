@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 import json
 import os
 import shutil
@@ -20,6 +21,7 @@ import x13binary
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_FILE = ROOT / "data" / "series.json"
+SOURCE_CACHE_FILE = ROOT / "reparar_actualizacion_dashboard" / "source_series.json"
 TASK_WORK_DIR = ROOT / "actividad_sectorial_emae"
 IPC_HISTORY_FILE = ROOT / "extender_ipc_1997" / "ipc_alternativo_1997_2016.csv"
 API_URL = "https://apis.datos.gob.ar/series/api/series"
@@ -1010,6 +1012,18 @@ def fetch_one(item: dict) -> dict:
     return extend_ipc_history(result) if item["code"] == IPC_CODE else result
 
 
+def append_cached_chart(series, previous, errors, code, builder):
+    """Keep a failed chart's last valid copy without blocking other updates."""
+    try:
+        series.append(builder())
+    except Exception as exc:
+        cached = next((item for item in previous.values() if item["code"] == code), None)
+        if cached is None:
+            raise RuntimeError(f"No se pudo calcular {code} y no existe respaldo: {exc}") from exc
+        series.append(deepcopy(cached))
+        errors.append(f"{code}: se mantuvo el grafico anterior ({exc})")
+
+
 def main() -> None:
     previous = {}
     if DATA_FILE.exists():
@@ -1019,15 +1033,31 @@ def main() -> None:
         except (OSError, json.JSONDecodeError):
             previous = {}
 
+    source_cache = {}
+    if SOURCE_CACHE_FILE.exists():
+        try:
+            source_cache = {item["id"]: item for item in json.loads(
+                SOURCE_CACHE_FILE.read_text(encoding="utf-8")
+            ).get("series", [])}
+        except (OSError, json.JSONDecodeError):
+            source_cache = {}
+
     series = []
     errors = []
     for item in SERIES:
+        print(f"Descargando {item['code']}", flush=True)
         try:
-            series.append(fetch_one(item))
+            downloaded = fetch_one(item)
+            source_cache[item["id"]] = deepcopy(downloaded)
+            series.append(downloaded)
         except Exception as exc:
-            if item["id"] in previous:
+            print(f"Advertencia {item['code']}: {exc}", flush=True)
+            if item["id"] in source_cache:
+                series.append(deepcopy(source_cache[item["id"]]))
+                errors.append(f"{item['code']}: se mantuvo la fuente anterior ({exc})")
+            elif item["id"] in previous:
                 series.append(previous[item["id"]])
-                errors.append(f"{item['code']}: se mantuvo la copia anterior")
+                errors.append(f"{item['code']}: se mantuvo la copia anterior ({exc})")
             else:
                 errors.append(str(exc))
 
@@ -1078,7 +1108,7 @@ def main() -> None:
         if base_level is None:
             raise RuntimeError(f"No existe IPC para el mes base {BASE_MONTH}")
         for item in series:
-            if not item.get("deflate"):
+            if not item.get("deflate") or item.get("deflator"):
                 continue
             real_data = []
             for point in item["data"]:
@@ -1117,43 +1147,33 @@ def main() -> None:
             "Exportaciones e importaciones", "Millones de dolares por mes",
             "Sector externo", "usd_millions",
         ))
-        series.append(make_fiscal_gdp_chart(by_code, gdp))
-        fiscal_income = concatenate_fiscal_segments(
-            [
-                by_code["FISC_INCOME_1993_2006"],
-                by_code["FISC_INCOME_2007_2014"],
-                by_code["FISC_INCOME_2015"],
-            ],
-            "FISC_INCOME_NOMINAL_SPLICED",
-            "Ingresos fiscales",
-        )
-        fiscal_spending = concatenate_fiscal_segments(
-            [
-                by_code["FISC_SPENDING_1993_2006"],
-                by_code["FISC_SPENDING_2007_2014"],
-                by_code["FISC_SPENDING_2015"],
-            ],
-            "FISC_SPENDING_NOMINAL_SPLICED",
-            "Gasto primario",
-        )
-        series.extend([
-            make_real_fiscal_series(
-                by_code["FISC_REVENUE_NOMINAL"], price_index_2014,
-                "FISC_REVENUE_REAL_SA", "Recaudaci\u00f3n total desestacionalizada en t\u00e9rminos reales", True,
-            ),
-            make_real_fiscal_series(
-                fiscal_income, price_index_2014,
-                "FISC_INCOME_REAL_SA", "Ingresos fiscales desestacionalizados en t\u00e9rminos reales", True,
-            ),
-            make_real_fiscal_series(
-                fiscal_spending, price_index_2014,
-                "FISC_SPENDING_REAL_SA", "Gasto primario desestacionalizado en t\u00e9rminos reales", True,
-            ),
-            make_real_fiscal_series(
-                by_code["ENERGY_SUBSIDIES_NOMINAL"], price_index_2014,
-                "ENERGY_SUBSIDIES_REAL_SA", "Subsidios a la energ\u00eda en t\u00e9rminos reales", True,
-            ),
-        ])
+        def append_fiscal(code, builder):
+            append_cached_chart(series, previous, errors, code, builder)
+
+        append_fiscal("FISC_RESULTS", lambda: make_fiscal_gdp_chart(by_code, gdp))
+        # Each derived chart owns its fallback, including missing source segments.
+        def fiscal_segments(prefix, code, title):
+            return concatenate_fiscal_segments(
+                [by_code[f"{prefix}_{suffix}"] for suffix in ("1993_2006", "2007_2014", "2015")],
+                code, title,
+            )
+
+        append_fiscal("FISC_REVENUE_REAL_SA", lambda: make_real_fiscal_series(
+            by_code["FISC_REVENUE_NOMINAL"], price_index_2014,
+            "FISC_REVENUE_REAL_SA", "Recaudaci\u00f3n total desestacionalizada en t\u00e9rminos reales", True,
+        ))
+        append_fiscal("FISC_INCOME_REAL_SA", lambda: make_real_fiscal_series(
+            fiscal_segments("FISC_INCOME", "FISC_INCOME_NOMINAL_SPLICED", "Ingresos fiscales"),
+            price_index_2014, "FISC_INCOME_REAL_SA", "Ingresos fiscales desestacionalizados en t\u00e9rminos reales", True,
+        ))
+        append_fiscal("FISC_SPENDING_REAL_SA", lambda: make_real_fiscal_series(
+            fiscal_segments("FISC_SPENDING", "FISC_SPENDING_NOMINAL_SPLICED", "Gasto primario"),
+            price_index_2014, "FISC_SPENDING_REAL_SA", "Gasto primario desestacionalizado en t\u00e9rminos reales", True,
+        ))
+        append_fiscal("ENERGY_SUBSIDIES_REAL_SA", lambda: make_real_fiscal_series(
+            by_code["ENERGY_SUBSIDIES_NOMINAL"], price_index_2014,
+            "ENERGY_SUBSIDIES_REAL_SA", "Subsidios a la energ\u00eda en t\u00e9rminos reales", True,
+        ))
         sectors = by_code.get("EMAE_SECTORS_SOURCE")
         if sectors:
             series.append(make_emae_sectors_chart(by_code["A2"], sectors))
@@ -1188,6 +1208,9 @@ def main() -> None:
         "series": series,
     }
     DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SOURCE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SOURCE_CACHE_FILE.write_text(json.dumps({"series": list(source_cache.values())},
+                                          ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     DATA_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Actualizadas {len(series)} series visibles")
     if errors:

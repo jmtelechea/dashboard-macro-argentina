@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-24T16:40:56+00:00",
+  "updated_at": "2026-10-25T14:23:20+00:00",
   "api": "https://apis.datos.gob.ar/series/api/series",
   "errors": [
     "S1: se mantuvo la copia anterior (No se pudo descargar S1 (158.1_REPTE_0_0_5): La API devolvio una serie sin observaciones)",

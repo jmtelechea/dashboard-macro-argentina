@@ -1,17 +1,7 @@
 {
-  "updated_at": "2026-11-18T19:29:22+00:00",
+  "updated_at": "2026-11-19T18:59:53+00:00",
   "api": "https://apis.datos.gob.ar/series/api/series",
   "errors": [
-    "P1: se mantuvo la fuente anterior (No se pudo descargar P1 (145.3_INGNACUAL_DICI_M_38): The read operation timed out)",
-    "P2: se mantuvo la fuente anterior (No se pudo descargar P2 (148.3_INUCLEONAL_DICI_M_19): The read operation timed out)",
-    "P3: se mantuvo la fuente anterior (No se pudo descargar P3 (148.3_IREGULANAL_DICI_M_22): The read operation timed out)",
-    "P6: se mantuvo la fuente anterior (No se pudo descargar P6 (147.3_IBIENESNAL_DICI_T_19): The read operation timed out)",
-    "P7: se mantuvo la fuente anterior (No se pudo descargar P7 (147.3_ISERVICNAL_DICI_T_22): The read operation timed out)",
-    "P8: se mantuvo la fuente anterior (No se pudo descargar P8 (148.1_IPC_ESTACINAL_DICI_T_25): The read operation timed out)",
-    "A2: se mantuvo la fuente anterior (No se pudo descargar A2 (143.3_NO_PR_2004_A_31): The read operation timed out)",
-    "S1: se mantuvo la fuente anterior (No se pudo descargar S1 (158.1_REPTE_0_0_5): The read operation timed out)",
-    "E1: se mantuvo la fuente anterior (No se pudo descargar E1 (42.3_EPH_PUNTUATAL_0_M_30): The read operation timed out)",
-    "EXT_EXPORT: se mantuvo la fuente anterior (No se pudo descargar EXT_EXPORT (74.3_IET_0_M_16): The read operation timed out)",
     "IS_PRIVATE_REGISTERED_REAL: se mantuvo la copia anterior",
     "IS_SECTOR_REAL_COMPARISON: se mantuvo la copia anterior"
   ],
@@ -12430,6 +12420,10 @@
         {
           "date": "2026-11-13",
           "value": 579523.0
+        },
+        {
+          "date": "2026-11-16",
+          "value": 129249.0
         }
       ]
     },
@@ -15221,6 +15215,10 @@
         {
           "date": "2026-11-13",
           "value": 4765201.0
+        },
+        {
+          "date": "2026-11-16",
+          "value": 4764673.0
         }
       ]
     },
@@ -38611,15 +38609,15 @@
         },
         {
           "date": "2026-11-02",
-          "value": 45863.0
+          "value": 45862.0
         },
         {
           "date": "2026-11-03",
-          "value": 45879.0
+          "value": 45880.0
         },
         {
           "date": "2026-11-04",
-          "value": 45855.0
+          "value": 45853.0
         },
         {
           "date": "2026-11-05",
@@ -38631,7 +38629,11 @@
         },
         {
           "date": "2026-11-12",
-          "value": 45818.0
+          "value": 45819.0
+        },
+        {
+          "date": "2026-11-13",
+          "value": 45909.0
         }
       ]
     },
@@ -69039,6 +69041,10 @@
         {
           "date": "2026-11-13",
           "value": 49600.0
+        },
+        {
+          "date": "2026-11-16",
+          "value": 49474.0
         }
       ]
     },
@@ -96258,6 +96264,10 @@
         {
           "date": "2026-11-16",
           "value": 22.6875
+        },
+        {
+          "date": "2026-11-17",
+          "value": 23.25
         }
       ]
     },
@@ -114633,6 +114643,10 @@
         {
           "date": "2026-11-16",
           "value": 20.8
+        },
+        {
+          "date": "2026-11-17",
+          "value": 20.52
         }
       ]
     },
@@ -138044,6 +138058,10 @@
         {
           "date": "2026-11-12",
           "value": 49073.0
+        },
+        {
+          "date": "2026-11-13",
+          "value": 49600.0
         }
       ]
     },
@@ -161455,6 +161473,10 @@
         {
           "date": "2026-11-12",
           "value": 1544.432
+        },
+        {
+          "date": "2026-11-13",
+          "value": 1547.0336
         }
       ]
     },
@@ -184870,6 +184892,10 @@
         {
           "date": "2026-11-16",
           "value": 1.22
+        },
+        {
+          "date": "2026-11-17",
+          "value": 1.2
         }
       ]
     },
@@ -186182,6 +186208,10 @@
         {
           "date": "2026-11-16",
           "value": 3707721.8593
+        },
+        {
+          "date": "2026-11-17",
+          "value": 4964927.0406
         }
       ]
     },
@@ -196205,7 +196235,7 @@
         },
         {
           "date": "2026-10-30",
-          "value": 2173532.5842338926
+          "value": 2175149.6841279264
         }
       ],
       "deflator": {
@@ -255235,6 +255265,10 @@
             {
               "date": "2026-11-17",
               "value": 1552.2627
+            },
+            {
+              "date": "2026-11-18",
+              "value": 1558.2427
             }
           ],
           "color": "#0a2540"
@@ -280284,6 +280318,10 @@
         {
           "date": "2026-11-12",
           "value": 36.739999999999995
+        },
+        {
+          "date": "2026-11-13",
+          "value": 44.739999999999995
         }
       ],
       "calculation": {
@@ -296230,11 +296268,15 @@
             },
             {
               "date": "2026-11-13",
-              "value": 62.83
+              "value": 62.77
             },
             {
               "date": "2026-11-16",
-              "value": 65.52
+              "value": 65.54
+            },
+            {
+              "date": "2026-11-17",
+              "value": 61.94
             }
           ],
           "color": "#0a2540"
@@ -319640,7 +319682,11 @@
             },
             {
               "date": "2026-11-16",
-              "value": 22.5
+              "value": 22.55
+            },
+            {
+              "date": "2026-11-17",
+              "value": 22.23
             }
           ],
           "color": "rgb(150, 175, 209)"
@@ -343045,7 +343091,11 @@
         },
         {
           "date": "2026-11-16",
-          "value": 22.5
+          "value": 22.55
+        },
+        {
+          "date": "2026-11-17",
+          "value": 22.23
         }
       ]
     },
